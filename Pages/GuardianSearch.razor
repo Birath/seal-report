@@ -1,0 +1,294 @@
+﻿@using System.Net.Http
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.WebAssembly.Http
+@using System.Text.Json
+@using System.Threading.Tasks
+@using Microsoft.Fast.Components.FluentUI
+@using TitleReport.Data
+@inject HttpClient Http
+@inject IBlazorDbFactory DbFactory
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage;
+
+@page "/"
+<style>
+	fluent-card {
+		padding: 12px;
+	}
+</style>
+<PageTitle>Guardian Search</PageTitle>
+
+<div class="container-fluid">
+	<div class="row gx-1 align-content-center">
+		<div class="col-3">
+			<h4>Title Report</h4>
+		</div>
+		<div class="col-7 col-md-6 d-flex align-self-center">
+			<FluentTextField class="flex-fill" @bind-Value="bungieName" Placeholder="Bungie Name" />
+			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="SearchAsync">Search</FluentButton>
+		</div>
+		<div class="col-2 col-md-2 align-self-center offset-md-1 ">
+			<FluentSwitch @bind-Value="_showLegacy">Show Legacy</FluentSwitch>
+		</div>
+	</div>
+</div>
+@if (isLoadingTitles)
+{
+	<div class="d-flex w-100 justify-content-center mt-2">
+		<FluentProgressRing class="align-self-center" />
+	</div>
+}
+@if (!isLoadingTitles && seals != null)
+{
+	<div class="container-fluid mt-2">
+		<div class="row  g-2">
+
+			@foreach (var seal in seals)
+			{
+				<div class="col-12 col-md-6 col-lg-4" style="@(seal.IsLegacy && !_showLegacy ? "display: none" : "")">
+
+					<FluentCard>
+						<div class="row">
+							<div class="col-7">
+								<div class="position-relative d-inline" style="color: @(seal.IsGildedCurrentSeason ? "#a68455" : seal.IsComplete ? "#732881" : "var(--neutral-foreground-hover)")">
+									<h3 class="d-inline">
+										@seal.Name @if (seal.GildedCount > 0)
+										{
+											<span class="destiny-symbol"></span>
+										}
+									</h3>
+									@if (seal.GildedCount > 0)
+									{
+										<p class="position-absolute ms-1 top-0 start-100 translate-middle " style="color: @(seal.IsGildedCurrentSeason ? "#a68455" : "#732881")">@seal.GildedCount</p>
+									}
+								</div>
+								<p>@seal.Description</p>
+								<div class="d-flex">
+									@if (seal.IsLegacy)
+									{
+										<FluentBadge Appearance="Appearance.Accent">Unavailable</FluentBadge>
+									}
+								</div>
+							</div>
+							<div class="col-5">
+								<img src="@seal.Icon" class="float-end" alt="Icon for @seal.Name" style="@(seal.IsComplete ? "" : "filter: grayscale(1)"); margin-right: -8px" />
+							</div>
+						</div>
+					</FluentCard>
+				</div>
+			}
+		</div>
+	</div>
+
+}
+
+@code {
+	private string? bungieName = "";
+	private List<Seal> seals = new List<Seal>();
+	private bool isLoadingTitles = false;
+
+	private bool _showLegacy = false;
+
+	private const string BungieApiEndpoint = "https://www.bungie.net/Platform";
+	private const string BungieManifestEndpoint = "https://www.bungie.net";
+	public const string RecordDefinitionsKey = "recordDefinitions";
+	public const string LoreDefinitionsKey = "loreDefinitions";
+	public const string ObjectiveDefinitionsKey = "objectiveDefinitions";
+
+	private IndexedDbManager? _dataBaseManager;
+
+
+	protected override async Task OnInitializedAsync()
+	{
+		Http.DefaultRequestHeaders.Add("X-API-Key", "deb11608535f443c9f85e72beac40252");
+		_dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
+		var response = await
+		Http.GetFromJsonAsync<BungieApiResponse<DestinyManifest>>($"{BungieApiEndpoint}/Destiny2/Manifest/");
+
+		if (response is null || response.ErrorStatus != BungieErrorStatus.Success)
+		{
+			Console.Error.WriteLine("Failed to get Destiny Manifest");
+			return;
+		}
+
+		var manifest = response.Response;
+		Console.Out.WriteLine($"Got destiny manifest: {manifest}");
+		if (manifest is null) return;
+
+		var storedManifestVersion = await LocalStorage.GetItemAsync<string>("manifestVersion");
+
+		if (storedManifestVersion != manifest.version)
+		{
+			await LocalStorage.SetItemAsync("manifestVersion", manifest.version);
+			var recordPath = manifest.jsonWorldComponentContentPaths["en"].DestinyRecordDefinition;
+			var presentationPath = manifest.jsonWorldComponentContentPaths["en"].DestinyPresentationNodeDefinition;
+			var lorePath = manifest.jsonWorldComponentContentPaths["en"].DestinyLoreDefinition;
+			var objectivePath = manifest.jsonWorldComponentContentPaths["en"].DestinyObjectiveDefinition;
+
+			// Create new client due to CORS error when using the injected one. (Maybe due to API key header?)
+			using (var client = new HttpClient())
+			{
+				var bulkAddTasks = new List<Task<BlazorDbEvent>>();
+
+				var records = await client.GetFromJsonAsync<Dictionary<uint, RecordDefinition>>($"{BungieManifestEndpoint}{recordPath}");
+				if (records != null && records.Any())
+				{
+					await _dataBaseManager.ClearTableAsync(Constants.RecordStoreName);
+
+					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.RecordStoreName, records.Values));
+				}
+
+				var presentationNodes = await client.GetFromJsonAsync<Dictionary<uint, PresentationNodeDefinition>>($"{BungieManifestEndpoint}{presentationPath}");
+
+				if (presentationNodes != null && presentationNodes.Any())
+				{
+					await _dataBaseManager.ClearTableAsync(Constants.PresentationNodesStoreName);
+
+					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.PresentationNodesStoreName, presentationNodes.Values));
+				}
+
+				foreach (var transationResult in await Task.WhenAll(bulkAddTasks))
+				{
+					if (transationResult.Failed)
+					{
+						Console.Error.WriteLine($"Bulk add {transationResult.Transaction} failed : {transationResult.Message}");
+					}
+				}
+
+			}
+		}
+	}
+
+	public async Task SearchAsync()
+	{
+		if (string.IsNullOrEmpty(bungieName) || !bungieName.Contains('#'))
+		{
+			return;
+		}
+		isLoadingTitles = true;
+		seals.Clear();
+
+		var userResponse = await Http.PostAsJsonAsync($"{BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", new
+		UserSearchRequest(bungieName));
+		if (userResponse.IsSuccessStatusCode)
+		{
+			var data = await userResponse.Content.ReadFromJsonAsync<BungieApiResponse<UserInfoCard[]>>();
+
+			if (data is null || data.Response is null || data.Message != "Ok") return;
+			Console.WriteLine(await userResponse.Content.ReadAsStringAsync());
+			Console.WriteLine(data.Response[0].displayName);
+			foreach (var user in data.Response ?? Array.Empty<UserInfoCard>())
+			{
+				Console.Out.WriteLine(user.displayName);
+				if (data.Response.Length == 1 || user.membershipType == user.crossSaveOverride)
+				{
+					await GetDestinyData(user);
+				}
+			}
+		}
+		else
+		{
+			Console.Error.WriteLine(userResponse.ReasonPhrase);
+		}
+		isLoadingTitles = false;
+	}
+
+	private async Task GetDestinyData(UserInfoCard user)
+	{
+		if (_dataBaseManager is null) return;
+		var uri = new Uri($"{BungieApiEndpoint}/Destiny2/{user.membershipType}/Profile/{user.membershipId:D}/?components={ComponentType.Records},{ComponentType.PresentationNodes}");
+
+		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyProfile>>(uri);
+
+		if (response is null || response.ErrorStatus != BungieErrorStatus.Success || response.Response is null)
+		{
+			Console.Error.WriteLine("Failed to read profile");
+			return;
+		}
+
+		var profile = response.Response;
+		var records = profile.profileRecords.data.records;
+		var profileSeals = new List<Seal>();
+
+		var sealPresentationNodes = await _dataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
+		var sealRootNode = await _dataBaseManager.GetRecordByIndexAsync<uint, PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", profile.profileRecords.data.recordSealsRootNodeHash);
+		foreach (var sealNode in sealPresentationNodes)
+		{
+			if (sealNode is null || sealNode.completionRecordHash is null) continue;
+			var profileSeal = records[sealNode.completionRecordHash.Value];
+
+			var sealDefinition = await _dataBaseManager.GetRecordByIndexAsync<uint, RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
+
+			if (sealDefinition is null)
+			{
+				Console.Error.WriteLine($"Could not find Seal with hash {sealNode.completionRecordHash} in Record store");
+				continue;
+			}
+
+			var complete = profileSeal.state.HasFlag(RecordState.CanEquipTitle);
+			var seal = new Seal(
+				sealDefinition.titleInfo.titlesByGender["Male"],
+				sealDefinition.displayProperties.description,
+				new Uri($"{BungieManifestEndpoint}{sealNode.originalIcon}")
+			)
+				{
+					IsComplete = complete,
+					IsLegacyAndUncomplete = !complete && !sealNode.parentNodeHashes.Contains(profile.profileRecords.data.recordSealsRootNodeHash),
+					IsLegacy = !sealNode.parentNodeHashes.Contains(profile.profileRecords.data.recordSealsRootNodeHash),
+				};
+
+			if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)
+			{
+				if (records.TryGetValue(gildingHash, out var gildingTracking))
+				{
+					seal.IsGildedCurrentSeason = !gildingTracking.state.HasFlag(RecordState.ObjectiveNotCompleted);
+					seal.GildedCount = gildingTracking.completedCount ?? 0;
+				}
+			}
+			profileSeals.Add(seal);
+		}
+
+		var sortedTitles = profileSeals.OrderByDescending(title => title.IsGildedCurrentSeason)
+					.ThenByDescending(title => title.GildedCount)
+					.ThenByDescending(title => title.IsComplete);
+		seals.AddRange(sortedTitles);
+
+	}
+
+	private class UserSearchRequest
+	{
+		public string displayName { get; set; }
+
+		public int displayNameCode { get; set; }
+
+		public UserSearchRequest(string guardianName)
+		{
+			var pieces = guardianName.Split('#');
+			displayName = pieces[0];
+			displayNameCode = int.Parse(pieces[1]);
+		}
+	}
+
+	public class Seal
+	{
+		public string Name { get; }
+		public string Description { get; }
+		public Uri Icon { get; }
+
+		public Seal(string name, string description, Uri icon)
+		{
+			Name = name;
+			Description = description;
+			Icon = icon;
+		}
+
+		public bool IsComplete { get; set; }
+
+		public bool IsLegacy { get; set; }
+
+		public bool IsLegacyAndUncomplete { get; set; }
+
+		public bool IsGildedCurrentSeason { get; set; }
+
+		public int GildedCount { get; set; }
+	}
+}
