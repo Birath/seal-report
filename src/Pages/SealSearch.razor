@@ -85,74 +85,11 @@
 
 	private bool _showLegacy = false;
 
-	private const string BungieApiEndpoint = "https://www.bungie.net/Platform";
-	private const string BungieManifestEndpoint = "https://www.bungie.net";
-	public const string RecordDefinitionsKey = "recordDefinitions";
-	public const string LoreDefinitionsKey = "loreDefinitions";
-	public const string ObjectiveDefinitionsKey = "objectiveDefinitions";
-
 	private IndexedDbManager? _dataBaseManager;
-
 
 	protected override async Task OnInitializedAsync()
 	{
-		Http.DefaultRequestHeaders.Add("X-API-Key", "deb11608535f443c9f85e72beac40252");
 		_dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
-		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyManifest>>($"{BungieApiEndpoint}/Destiny2/Manifest/");
-
-		if (response is null || response.ErrorStatus != BungieErrorStatus.Success)
-		{
-			Console.Error.WriteLine("Failed to get Destiny Manifest");
-			return;
-		}
-
-		var manifest = response.Response;
-		if (manifest is null) return;
-
-		Console.Out.WriteLine($"Got destiny manifest: {manifest.version}");
-
-		var storedManifestVersion = await LocalStorage.GetItemAsync<string>("manifestVersion");
-
-		if (storedManifestVersion != manifest.version)
-		{
-			await LocalStorage.SetItemAsync("manifestVersion", manifest.version);
-			var recordPath = manifest.jsonWorldComponentContentPaths["en"].DestinyRecordDefinition;
-			var presentationPath = manifest.jsonWorldComponentContentPaths["en"].DestinyPresentationNodeDefinition;
-			var lorePath = manifest.jsonWorldComponentContentPaths["en"].DestinyLoreDefinition;
-			var objectivePath = manifest.jsonWorldComponentContentPaths["en"].DestinyObjectiveDefinition;
-
-			// Create new client due to CORS error when using the injected one. (Maybe due to API key header?)
-			using (var client = new HttpClient())
-			{
-				var bulkAddTasks = new List<Task<BlazorDbEvent>>();
-
-				var records = await client.GetFromJsonAsync<Dictionary<uint, RecordDefinition>>($"{BungieManifestEndpoint}{recordPath}");
-				if (records != null && records.Any())
-				{
-					await _dataBaseManager.ClearTableAsync(Constants.RecordStoreName);
-
-					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.RecordStoreName, records.Values));
-				}
-
-				var presentationNodes = await client.GetFromJsonAsync<Dictionary<uint, PresentationNodeDefinition>>($"{BungieManifestEndpoint}{presentationPath}");
-
-				if (presentationNodes != null && presentationNodes.Any())
-				{
-					await _dataBaseManager.ClearTableAsync(Constants.PresentationNodesStoreName);
-
-					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.PresentationNodesStoreName, presentationNodes.Values));
-				}
-
-				foreach (var transationResult in await Task.WhenAll(bulkAddTasks))
-				{
-					if (transationResult.Failed)
-					{
-						Console.Error.WriteLine($"Bulk add {transationResult.Transaction} failed : {transationResult.Message}");
-					}
-				}
-
-			}
-		}
 	}
 
 	public async Task SearchAsync()
@@ -164,7 +101,7 @@
 		isLoadingTitles = true;
 		seals.Clear();
 
-		var userResponse = await Http.PostAsJsonAsync($"{BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", new UserSearchRequest(bungieName));
+		var userResponse = await Http.PostAsJsonAsync($"{Constants.BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", new UserSearchRequest(bungieName));
 		if (userResponse.IsSuccessStatusCode)
 		{
 			var data = await userResponse.Content.ReadFromJsonAsync<BungieApiResponse<UserInfoCard[]>>();
@@ -188,7 +125,7 @@
 	private async Task GetDestinyData(UserInfoCard user)
 	{
 		if (_dataBaseManager is null) return;
-		var uri = new Uri($"{BungieApiEndpoint}/Destiny2/{user.membershipType}/Profile/{user.membershipId:D}/?components={ComponentType.Records},{ComponentType.PresentationNodes}");
+		var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.membershipType}/Profile/{user.membershipId:D}/?components={ComponentType.Records},{ComponentType.PresentationNodes}");
 
 		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyProfile>>(uri);
 
@@ -227,7 +164,7 @@
 			var seal = new Seal(
 				sealDefinition.titleInfo.titlesByGender["Male"],
 				sealDefinition.displayProperties.description,
-				new Uri($"{BungieManifestEndpoint}{sealNode.originalIcon}")
+				new Uri($"{Constants.BungieManifestEndpoint}{sealNode.originalIcon}")
 			)
 				{
 					IsComplete = complete,

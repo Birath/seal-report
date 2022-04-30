@@ -1,0 +1,91 @@
+﻿@using TitleReport.Data
+@inject HttpClient Http
+@inject IBlazorDbFactory DbFactory
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage;
+
+@if (_isLoaded)
+{
+    @ChildContent
+}
+else
+{
+    <div class="d-flex position-absolute top-50 start-50 translate-middle w-100 justify-content-center">
+		<FluentProgressRing />
+		<h3 class="ms-3">
+			Getting Destiny Manifest...
+		</h3>
+	</div>
+}
+
+@code {
+	private bool _isLoaded = false;
+
+	[Parameter]
+	public RenderFragment? ChildContent { get; set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		if (!Http.DefaultRequestHeaders.Contains("X-API-Key"))
+		{
+			Http.DefaultRequestHeaders.Add("X-API-Key", Constants.BungieApiKey);
+		}
+		var _dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
+		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyManifest>>($"{Constants.BungieApiEndpoint}/Destiny2/Manifest/");
+
+		if (response is null || response.ErrorStatus != BungieErrorStatus.Success)
+		{
+			Console.Error.WriteLine("Failed to get Destiny Manifest");
+			return;
+		}
+
+		var manifest = response.Response;
+		if (manifest is null) return;
+
+		Console.Out.WriteLine($"Got destiny manifest: {manifest.version}");
+
+		var storedManifestVersion = await LocalStorage.GetItemAsync<string>("manifestVersion");
+
+		if (storedManifestVersion != manifest.version)
+		{
+			await LocalStorage.SetItemAsync("manifestVersion", manifest.version);
+			var recordPath = manifest.jsonWorldComponentContentPaths["en"].DestinyRecordDefinition;
+			var presentationPath = manifest.jsonWorldComponentContentPaths["en"].DestinyPresentationNodeDefinition;
+			var lorePath = manifest.jsonWorldComponentContentPaths["en"].DestinyLoreDefinition;
+			var objectivePath = manifest.jsonWorldComponentContentPaths["en"].DestinyObjectiveDefinition;
+
+			// Create new client due to CORS error when using the injected one. (Maybe due to API key header?)
+			using (var client = new HttpClient())
+			{
+				var bulkAddTasks = new List<Task<BlazorDbEvent>>();
+
+				var records = await client.GetFromJsonAsync<Dictionary<uint, RecordDefinition>>($"{Constants.BungieManifestEndpoint}{recordPath}");
+				if (records != null && records.Any())
+				{
+					await _dataBaseManager.ClearTableAsync(Constants.RecordStoreName);
+
+					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.RecordStoreName, records.Values));
+				}
+
+				var presentationNodes = await client.GetFromJsonAsync<Dictionary<uint, PresentationNodeDefinition>>($"{Constants.BungieManifestEndpoint}{presentationPath}");
+
+				if (presentationNodes != null && presentationNodes.Any())
+				{
+					await _dataBaseManager.ClearTableAsync(Constants.PresentationNodesStoreName);
+
+					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.PresentationNodesStoreName, presentationNodes.Values));
+				}
+
+				foreach (var transationResult in await Task.WhenAll(bulkAddTasks))
+				{
+					if (transationResult.Failed)
+					{
+						Console.Error.WriteLine($"Bulk add {transationResult.Transaction} failed : {transationResult.Message}");
+					}
+				}
+
+			}
+		}
+
+		_isLoaded = true;
+	}
+}
