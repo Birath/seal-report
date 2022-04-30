@@ -15,12 +15,12 @@
 		padding: 12px;
 	}
 </style>
-<PageTitle>Guardian Search</PageTitle>
+<PageTitle>Seal Report</PageTitle>
 
 <div class="container-fluid">
 	<div class="row gx-1 align-content-center">
 		<div class="col-3">
-			<h4>Title Report</h4>
+			<h4>Seal Report</h4>
 		</div>
 		<div class="col-7 col-md-6 d-flex align-self-center">
 			<FluentTextField class="flex-fill" @bind-Value="bungieName" Placeholder="Bungie Name" />
@@ -101,8 +101,7 @@
 	{
 		Http.DefaultRequestHeaders.Add("X-API-Key", "deb11608535f443c9f85e72beac40252");
 		_dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
-		var response = await
-		Http.GetFromJsonAsync<BungieApiResponse<DestinyManifest>>($"{BungieApiEndpoint}/Destiny2/Manifest/");
+		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyManifest>>($"{BungieApiEndpoint}/Destiny2/Manifest/");
 
 		if (response is null || response.ErrorStatus != BungieErrorStatus.Success)
 		{
@@ -111,8 +110,9 @@
 		}
 
 		var manifest = response.Response;
-		Console.Out.WriteLine($"Got destiny manifest: {manifest}");
 		if (manifest is null) return;
+
+		Console.Out.WriteLine($"Got destiny manifest: {manifest.version}");
 
 		var storedManifestVersion = await LocalStorage.GetItemAsync<string>("manifestVersion");
 
@@ -167,18 +167,14 @@
 		isLoadingTitles = true;
 		seals.Clear();
 
-		var userResponse = await Http.PostAsJsonAsync($"{BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", new
-		UserSearchRequest(bungieName));
+		var userResponse = await Http.PostAsJsonAsync($"{BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", new UserSearchRequest(bungieName));
 		if (userResponse.IsSuccessStatusCode)
 		{
 			var data = await userResponse.Content.ReadFromJsonAsync<BungieApiResponse<UserInfoCard[]>>();
+			if (data is null || data.Message != "Ok") return;
 
-			if (data is null || data.Response is null || data.Message != "Ok") return;
-			Console.WriteLine(await userResponse.Content.ReadAsStringAsync());
-			Console.WriteLine(data.Response[0].displayName);
-			foreach (var user in data.Response ?? Array.Empty<UserInfoCard>())
+			foreach (var user in data?.Response ?? Array.Empty<UserInfoCard>())
 			{
-				Console.Out.WriteLine(user.displayName);
 				if (data.Response.Length == 1 || user.membershipType == user.crossSaveOverride)
 				{
 					await GetDestinyData(user);
@@ -206,11 +202,17 @@
 		}
 
 		var profile = response.Response;
-		var records = profile.profileRecords.data.records;
+		var recordsData = profile.profileRecords?.data;
+		if (recordsData is null) return;
+
+		var records = recordsData.records;
+
+		if (records is null) return;
+
 		var profileSeals = new List<Seal>();
 
 		var sealPresentationNodes = await _dataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
-		var sealRootNode = await _dataBaseManager.GetRecordByIndexAsync<uint, PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", profile.profileRecords.data.recordSealsRootNodeHash);
+		var sealRootNode = await _dataBaseManager.GetRecordByIndexAsync<uint, PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
 		foreach (var sealNode in sealPresentationNodes)
 		{
 			if (sealNode is null || sealNode.completionRecordHash is null) continue;
@@ -232,8 +234,8 @@
 			)
 				{
 					IsComplete = complete,
-					IsLegacyAndUncomplete = !complete && !sealNode.parentNodeHashes.Contains(profile.profileRecords.data.recordSealsRootNodeHash),
-					IsLegacy = !sealNode.parentNodeHashes.Contains(profile.profileRecords.data.recordSealsRootNodeHash),
+					IsLegacyAndUncomplete = !complete && !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash),
+					IsLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash),
 				};
 
 			if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)

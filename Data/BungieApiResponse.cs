@@ -20,7 +20,7 @@
     public class ComponentObjectResponse<T>
     {
 
-        public T data {get; set;}
+        public T? data {get; set;}
 
         public int privacy {get; set;}
 
