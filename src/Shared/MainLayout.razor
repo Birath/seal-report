@@ -1,15 +1,26 @@
 ﻿@inherits LayoutComponentBase
 
-<FluentDesignSystemProvider @ref=fdsp BaseLayerLuminance=@baseLayerLuminance>
+<FluentDesignSystemProvider @ref=fdsp BaseLayerLuminance=@baseLayerLuminance class="pb-4 min-vh-100">
 
-    <div class="page">        
+    <div class="page ">        
         <main>
-            <div class="top-row px-4">
-                <a href="https://docs.microsoft.com/aspnet/" target="_blank">About</a>
+            <div class="app-top-row container" >
+                <div class="row justify-content-around h-100 align-content-center ">
+                    <div class="col align-content-center">
+                        <h4 class="align-self-center">Seal Report</h4>
+                    </div>
+                    <div class="col d-flex justify-content-end">
+                        <FluentSwitch @onchange=SwitchTheme >
+                            <span style="padding-inline-end: 8px;"> Theme</span>
+                            <span slot="unchecked-message">Dark</span>
+                            <span slot="checked-message">Light</span>
+                        </FluentSwitch>
+                    </div>
+                </div>
             </div>
-            <article class="content px-4">
+            <div class="content">
                 @Body
-            </article>
+            </div>
         </main>
     </div>
    

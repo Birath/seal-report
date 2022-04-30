@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Components.Web;
+﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Fast.Components.FluentUI;
+using Microsoft.Fast.Components.FluentUI.DesignTokens;
 
 namespace TitleReport.Shared
 {
@@ -9,6 +11,7 @@ namespace TitleReport.Shared
         FluentDesignSystemProvider fdsp = new();
         LocalizationDirection? dir;
         float? baseLayerLuminance;
+
 
         public void SwitchTheme()
         {
