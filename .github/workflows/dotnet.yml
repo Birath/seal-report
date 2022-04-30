@@ -1,4 +1,4 @@
-name: .NET
+name: build-and-publish-page
 
 env:
   PUBLISH_DIR: src/bin/Release/net7.0/publish/wwwroot
@@ -26,6 +26,12 @@ jobs:
     - name: Publish app
       run: dotnet publish -c Release
       
+    - name: Rewrite base href
+      uses: SteveSandersonMS/ghaction-rewrite-base-href@v1
+      with:
+        html_path: ${{ env.PUBLISH_DIR }}/index.html
+        base_href: /seal-report/
+        
     - name: GitHub Pages
       if: success()
       uses: crazy-max/ghaction-github-pages@v2.6.0
