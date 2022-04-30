@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Seal Report</title>
     <base href="/" />
+    <script>
+        document.getElementsByTagName('base')[0].href = window.location.pathname
+    </script>
     <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
     <link href="css/app.css" rel="stylesheet" />
     <link href="TitleReport.styles.css" rel="stylesheet" />
@@ -39,6 +42,8 @@
                 }
             }
         }(window.location))
+
+
     </script>
     <!-- End Single Page Apps for GitHub Pages -->
 </head>
