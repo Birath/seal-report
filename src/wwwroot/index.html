@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>TitleReport</title>
+    <title>Seal Report</title>
     <base href="/" />
     <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
     <link href="css/app.css" rel="stylesheet" />
@@ -54,7 +54,7 @@
     <script>
         document.fonts.ready.then(() => {
             if (!document.fonts.check("1em Destiny Symbols")) {
-                const destinySymbolsFont = new FontFace('Destiny Symbols', 'url(/fonts/Destiny_Keys.woff2)');
+                const destinySymbolsFont = new FontFace('Destiny Symbols', `url(${document.baseURI}/fonts/Destiny_Keys.woff2)`);
                 destinySymbolsFont.load().then(font => {
                     document.fonts.add(font);
                 })
