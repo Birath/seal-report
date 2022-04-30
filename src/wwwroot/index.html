@@ -9,6 +9,7 @@
     <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
     <link href="css/app.css" rel="stylesheet" />
     <link href="TitleReport.styles.css" rel="stylesheet" />
+
     <!-- Start Single Page Apps for GitHub Pages -->
     <script type="text/javascript">
         // Single Page Apps for GitHub Pages
@@ -50,6 +51,16 @@
         <a href="" class="reload">Reload</a>
         <a class="dismiss">🗙</a>
     </div>
+    <script>
+        document.fonts.ready.then(() => {
+            if (!document.fonts.check("1em Destiny Symbols")) {
+                const destinySymbolsFont = new FontFace('Destiny Symbols', 'url(/fonts/Destiny_Keys.woff2)');
+                destinySymbolsFont.load().then(font => {
+                    document.fonts.add(font);
+                })
+            }
+        })
+    </script>
     <script src="_framework/blazor.webassembly.js"></script>
     <script src="_content/BlazorIndexedDB/dexie.min.js"></script>
     <script src="_content/BlazorIndexedDB/blazorDB.js"></script>
