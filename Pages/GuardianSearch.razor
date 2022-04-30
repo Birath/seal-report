@@ -216,8 +216,8 @@
 		foreach (var sealNode in sealPresentationNodes)
 		{
 			if (sealNode is null || sealNode.completionRecordHash is null) continue;
-			var profileSeal = records[sealNode.completionRecordHash.Value];
 
+			var profileSeal = records[sealNode.completionRecordHash.Value];
 			var sealDefinition = await _dataBaseManager.GetRecordByIndexAsync<uint, RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
 
 			if (sealDefinition is null)
