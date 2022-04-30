@@ -212,13 +212,13 @@
 		var profileSeals = new List<Seal>();
 
 		var sealPresentationNodes = await _dataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
-		var sealRootNode = await _dataBaseManager.GetRecordByIndexAsync<uint, PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
+		var sealRootNode = await _dataBaseManager.GetRecordByIndexAsync<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
 		foreach (var sealNode in sealPresentationNodes)
 		{
 			if (sealNode is null || sealNode.completionRecordHash is null) continue;
 
 			var profileSeal = records[sealNode.completionRecordHash.Value];
-			var sealDefinition = await _dataBaseManager.GetRecordByIndexAsync<uint, RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
+			var sealDefinition = await _dataBaseManager.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
 
 			if (sealDefinition is null)
 			{
