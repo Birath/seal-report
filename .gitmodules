@@ -1,0 +1,3 @@
+[submodule "BlazorDB"]
+	path = BlazorDB
+	url = git@github.com:Birath/BlazorDB.git
