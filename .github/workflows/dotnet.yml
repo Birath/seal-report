@@ -32,6 +32,9 @@ jobs:
         html_path: ${{ env.PUBLISH_DIR }}/index.html
         base_href: /seal-report/
         
+    - name: Create CNAME file
+      run: echo "seal.report" > ${{ env.PUBLISH_DIR }}/CNAME
+      
     - name: GitHub Pages
       if: success()
       uses: crazy-max/ghaction-github-pages@v2.6.0
