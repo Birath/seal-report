@@ -11,46 +11,51 @@
 
 @page "/"
 <style>
-	fluent-card {
-		padding: 12px;
-	}
+
 </style>
 <PageTitle>Seal Report</PageTitle>
 
 <div class="container-fluid">
 	<div class="row gx-1 align-content-center">
-		<div class="col-6 offset-0 offset-md-3 d-flex align-self-center">
+		<div class="col-6 offset-3 d-flex align-self-center">
 			<FluentTextField class="flex-fill" @bind-Value="bungieName" Placeholder="Bungie Name" />
-			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="SearchAsync">Search</FluentButton>
-		</div>
-		<div class="col-3  align-self-center offset-3 offset-md-0 d-flex justify-content-end">
-			<FluentSwitch @bind-Value="_showLegacy">Show Legacy</FluentSwitch>
+			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="OnSearch">Search</FluentButton>
 		</div>
 	</div>
 </div>
-@if (isLoadingTitles)
+@if (_isLoadingTitles)
 {
 	<div class="d-flex w-100 justify-content-center mt-2">
 		<FluentProgressRing class="align-self-center" />
 	</div>
 }
-@if (!isLoadingTitles && seals != null)
+@if (!_isLoadingTitles && _seals != null)
 {
 	<div class="container-xl mt-2">
-		<div class="row  g-2">
+		<div class="row justify-content-center mb-2">
+			<div class="col-12 d-flex justify-content-center">
+				<FluentToolbar>
+					@foreach (var property in AllFilterProperties)
+				   {
+						<FluentCheckbox Value="@(IsPropertyActive(property))" @onchange="@((ChangeEventArgs __e) => ToggleFilterProperty(property))">@property</FluentCheckbox>
+				   }
+				</FluentToolbar>
+			</div>
+		</div>
+		<div class="row g-2">
 
-			@foreach (var seal in seals)
+			@foreach (var seal in _seals)
 			{
-				<div class="col-12 col-md-6 col-lg-4" style="@(seal.IsLegacy && !_showLegacy ? "display: none" : "")">
+				<div class="col-12 col-md-6 col-lg-4" style="@(Filter(seal) ? "" : "display: none")">
 
-					<FluentCard>
+					<FluentCard class="p-2">
 						<div class="row">
 							<div class="col-7">
 								<div class="position-relative d-inline" style="color: @(seal.IsGildedCurrentSeason ? "#a68455" : seal.IsComplete ? "#732881" : "var(--neutral-foreground-hover)")">
 									<h3 class="d-inline">
-										@seal.Name @if (seal.GildedCount > 0)
+										@seal.Title  @if (seal.GildedCount > 0)
 										{
-											<span class="destiny-symbol"></span>
+											<span class="destiny-symbol"> </span>
 										}
 									</h3>
 									@if (seal.GildedCount > 0)
@@ -67,7 +72,23 @@
 								</div>
 							</div>
 							<div class="col-5">
-								<img src="@seal.Icon" class="float-end" alt="Icon for @seal.Name" style="@(seal.IsComplete ? "" : "filter: grayscale(1)"); margin-right: -8px" />
+								<img src="@seal.Icon" class="float-end" alt="Icon for @seal.Title" style="@(seal.IsComplete ? "" : "filter: grayscale(1)"); margin-right: -8px" />
+							</div>
+						</div>
+						
+						<div class="row pt-2">
+							<div class="col-12">
+								<FluentAccordion>
+									<FluentAccordionItem>
+										<div slot="start">Triumphs @seal.RequiredTriumphs.Count(t => t.IsComplete) / @seal.RequiredTriumphs.Count()</div>
+										@foreach (var trimump in seal.RequiredTriumphs)
+										{
+
+											<p style="@(trimump.IsComplete ? "color: green" : "color: red")">@trimump.Name - @trimump.CompletionPercentage</p>
+
+										}
+									</FluentAccordionItem>
+								</FluentAccordion>
 							</div>
 						</div>
 					</FluentCard>
@@ -80,10 +101,25 @@
 
 @code {
 	private string? bungieName = "";
-	private List<Seal> seals = new List<Seal>();
-	private bool isLoadingTitles = false;
+	private List<Seal> _seals = new List<Seal>();
+	private bool _isLoadingTitles = false;
 
 	private bool _showLegacy = false;
+
+	public string[] AllFilterProperties =
+		{
+			"complete",
+			"legacy",
+			"gilded",
+			"raid"
+	};
+
+	public HashSet<string> ActiveFilterProperties { get; } = new HashSet<string>()
+	{
+		"complete",
+		"legacy",
+		"gilded",
+	};
 
 	private IndexedDbManager? _dataBaseManager;
 
@@ -92,139 +128,91 @@
 		_dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
 	}
 
-	public async Task SearchAsync()
+	public async Task OnSearch()
 	{
 		if (string.IsNullOrEmpty(bungieName) || !bungieName.Contains('#'))
 		{
+			Console.Error.WriteLine($"Invalid bungie name: {bungieName}");
 			return;
 		}
-		isLoadingTitles = true;
-		seals.Clear();
 
-		var userResponse = await Http.PostAsJsonAsync($"{Constants.BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", new UserSearchRequest(bungieName));
-		if (userResponse.IsSuccessStatusCode)
+		if (!BungieName.TryParse(bungieName, out var searchData))
 		{
-			var data = await userResponse.Content.ReadFromJsonAsync<BungieApiResponse<UserInfoCard[]>>();
-			if (data is null || data.Message != "Ok") return;
+			Console.Error.WriteLine($"Invalid bungie name: {bungieName}");
+			return;
+		}
 
-			foreach (var user in data?.Response ?? Array.Empty<UserInfoCard>())
+		_isLoadingTitles = true;
+		_seals.Clear();
+		try
+		{
+			var userData = await SearchGuardianAsync(searchData!);
+			if (userData is null)
 			{
-				if (data.Response.Length == 1 || user.membershipType == user.crossSaveOverride)
-				{
-					await GetDestinyData(user);
-				}
+				Console.Error.WriteLine($"Could not find user data for {bungieName}");
+				return;
 			}
+			var userSeals = await GetDestinyData(userData);
+			_seals.AddRange(userSeals);
 		}
-		else
+		finally
 		{
-			Console.Error.WriteLine(userResponse.ReasonPhrase);
+			_isLoadingTitles = false;
 		}
-		isLoadingTitles = false;
+
+
 	}
 
-	private async Task GetDestinyData(UserInfoCard user)
+	private bool Filter(Seal seal)
 	{
-		if (_dataBaseManager is null) return;
-		var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.membershipType}/Profile/{user.membershipId:D}/?components={ComponentType.Records},{ComponentType.PresentationNodes}");
-
-		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyProfile>>(uri);
-
-		if (response is null || response.ErrorStatus != BungieErrorStatus.Success || response.Response is null)
+		if (ActiveFilterProperties.Count == 0) return true;
+		foreach (var activeProperty in ActiveFilterProperties)
 		{
-			Console.Error.WriteLine("Failed to read profile");
-			return;
-		}
-
-		var profile = response.Response;
-		var recordsData = profile.profileRecords?.data;
-		if (recordsData is null) return;
-
-		var records = recordsData.records;
-
-		if (records is null) return;
-
-		var profileSeals = new List<Seal>();
-
-		var sealPresentationNodes = await _dataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
-		var sealRootNode = await _dataBaseManager.GetRecordByIndexAsync<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
-		foreach (var sealNode in sealPresentationNodes)
-		{
-			if (sealNode is null || sealNode.completionRecordHash is null) continue;
-
-			var profileSeal = records[sealNode.completionRecordHash.Value];
-			var sealDefinition = await _dataBaseManager.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
-
-			if (sealDefinition is null)
-			{
-				Console.Error.WriteLine($"Could not find Seal with hash {sealNode.completionRecordHash} in Record store");
-				continue;
+			if (seal.FilterProperties.Contains(activeProperty)) {
+				return true;
 			}
-
-			var complete = profileSeal.state.HasFlag(RecordState.CanEquipTitle);
-			var seal = new Seal(
-				sealDefinition.titleInfo.titlesByGender["Male"],
-				sealDefinition.displayProperties.description,
-				new Uri($"{Constants.BungieManifestEndpoint}{sealNode.originalIcon}")
-			)
-				{
-					IsComplete = complete,
-					IsLegacyAndUncomplete = !complete && !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash),
-					IsLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash),
-				};
-
-			if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)
-			{
-				if (records.TryGetValue(gildingHash, out var gildingTracking))
-				{
-					seal.IsGildedCurrentSeason = !gildingTracking.state.HasFlag(RecordState.ObjectiveNotCompleted);
-					seal.GildedCount = gildingTracking.completedCount ?? 0;
-				}
-			}
-			profileSeals.Add(seal);
 		}
-
-		var sortedTitles = profileSeals.OrderByDescending(title => title.IsGildedCurrentSeason)
-					.ThenByDescending(title => title.GildedCount)
-					.ThenByDescending(title => title.IsComplete);
-		seals.AddRange(sortedTitles);
-
+		return false;
 	}
 
-	private class UserSearchRequest
+	private void ToggleFilterProperty(string property)
+	{
+		if (ActiveFilterProperties.Contains(property))
+		{
+			ActiveFilterProperties.Remove(property);
+		} else
+		{
+			ActiveFilterProperties.Add(property);
+		}
+	}
+
+	private bool IsPropertyActive(string property) => ActiveFilterProperties.Contains(property);
+
+	public class BungieName
 	{
 		public string displayName { get; set; }
 
-		public int displayNameCode { get; set; }
+		public short displayNameCode { get; set; }
 
-		public UserSearchRequest(string guardianName)
+		private BungieName(string name, short code)
 		{
-			var pieces = guardianName.Split('#');
-			displayName = pieces[0];
-			displayNameCode = int.Parse(pieces[1]);
+			displayName = name;
+			displayNameCode = code;
+		}
+
+		public static bool TryParse(string name, out BungieName? bungieName)
+		{
+			bungieName = null;
+			var pieces = name.Split('#');
+			if (pieces.Length != 2) return false;
+			if (short.TryParse(pieces[1], out short parsedCode))
+			{
+				bungieName = new BungieName(pieces[0], parsedCode);
+				return true;
+			}
+			return false;
 		}
 	}
 
-	public class Seal
-	{
-		public string Name { get; }
-		public string Description { get; }
-		public Uri Icon { get; }
-
-		public Seal(string name, string description, Uri icon)
-		{
-			Name = name;
-			Description = description;
-			Icon = icon;
-		}
-
-		public bool IsComplete { get; set; }
-
-		public bool IsLegacy { get; set; }
-
-		public bool IsLegacyAndUncomplete { get; set; }
-
-		public bool IsGildedCurrentSeason { get; set; }
-
-		public int GildedCount { get; set; }
-	}
+	
 }

@@ -9,16 +9,21 @@
 }
 else
 {
-    <div class="d-flex position-absolute top-50 start-50 translate-middle w-100 justify-content-center">
-		<FluentProgressRing />
-		<h3 class="ms-3">
-			Getting Destiny Manifest...
-		</h3>
-	</div>
+	<FluentDesignSystemProvider @ref=fdsp BaseLayerLuminance=@baseLayerLuminance class="vh-100">
+
+		<div class="d-flex position-absolute top-50 start-50 translate-middle w-100 justify-content-center">
+			<FluentProgressRing />
+			<h3 class="ms-3">
+				Getting Destiny Manifest...
+			</h3>
+		</div>
+	</FluentDesignSystemProvider>
 }
 
 @code {
+	FluentDesignSystemProvider fdsp = new();
 	private bool _isLoaded = false;
+	float baseLayerLuminance = 0.2f;
 
 	[Parameter]
 	public RenderFragment? ChildContent { get; set; }
@@ -29,6 +34,11 @@ else
 		{
 			Http.DefaultRequestHeaders.Add("X-API-Key", Constants.BungieApiKey);
 		}
+
+		//if (await LocalStorage.ContainKeyAsync(nameof(baseLayerLuminance))) {
+		//	baseLayerLuminance = await LocalStorage.GetItemAsync<float>(nameof(baseLayerLuminance));
+		//}
+
 		var _dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
 		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyManifest>>($"{Constants.BungieApiEndpoint}/Destiny2/Manifest/");
 

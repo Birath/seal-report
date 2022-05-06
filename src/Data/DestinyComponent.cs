@@ -31,7 +31,27 @@ namespace TitleReport.Data
         public RecordState state {get; set;}
 
         public int? completedCount {get; set;}
-        
+
+        public ObjectiveProgress[] objectives { get; set; } = Array.Empty<ObjectiveProgress>();
+
+
+    }
+
+    public class ObjectiveProgress
+    {
+        public uint objectiveHash { get; set; }
+
+        public uint destinationHash { get; set; }
+
+        public uint activityHash { get; set; }
+
+        public int? progress { get; set; }
+
+        public int completionValue { get; set; }
+
+        public bool complete { get; set; }
+
+        public bool visible { get; set; }
     }
 
     public class PresentationNodesComponent

@@ -1,6 +1,7 @@
 ﻿@inherits LayoutComponentBase
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage;
 
-<FluentDesignSystemProvider @ref=fdsp BaseLayerLuminance=@baseLayerLuminance class="pb-4 min-vh-100">
+<FluentDesignSystemProvider @ref=fdsp BaseLayerLuminance=@_activeTheme.BaseLayerLuminance class="pb-4 min-vh-100">
 
     <div class="page ">        
         <main>
@@ -10,7 +11,7 @@
                         <h4 class="align-self-center">Seal Report</h4>
                     </div>
                     <div class="col d-flex justify-content-end">
-                        <FluentSwitch @onchange=SwitchTheme >
+                        <FluentSwitch @bind-Value=IsLightTheme @onchange=SwitchTheme >
                             <span style="padding-inline-end: 8px;"> Theme</span>
                             <span slot="unchecked-message">Dark</span>
                             <span slot="checked-message">Light</span>
@@ -26,3 +27,18 @@
    
 
 </FluentDesignSystemProvider>
+@code{
+
+    Theme _activeTheme = Theme.Dark;
+    public bool IsLightTheme { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await LocalStorage.ContainKeyAsync(nameof(_activeTheme)))
+        {
+            var selectedTheme = await LocalStorage.GetItemAsync<ThemeType>(nameof(_activeTheme));
+            _activeTheme = selectedTheme == ThemeType.Light ? Theme.Light : Theme.Dark;
+            IsLightTheme = selectedTheme == ThemeType.Light;
+        }
+    }
+}
