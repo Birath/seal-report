@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TitleReport", "src\TitleRep
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlazorDB", "BlazorDB\src\BlazorDB\BlazorDB.csproj", "{4572E0F1-6FD1-4440-A118-2E5F4C22FD4D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TitleReport.Tests", "TitleReport.Tests\TitleReport.Tests.csproj", "{C30B2F92-F88B-4D00-A053-B04D0DDA9EB0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{4572E0F1-6FD1-4440-A118-2E5F4C22FD4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4572E0F1-6FD1-4440-A118-2E5F4C22FD4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4572E0F1-6FD1-4440-A118-2E5F4C22FD4D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C30B2F92-F88B-4D00-A053-B04D0DDA9EB0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C30B2F92-F88B-4D00-A053-B04D0DDA9EB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C30B2F92-F88B-4D00-A053-B04D0DDA9EB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C30B2F92-F88B-4D00-A053-B04D0DDA9EB0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
