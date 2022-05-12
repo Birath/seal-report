@@ -4,6 +4,7 @@ namespace TitleReport.Data
     {
         Records = 900,
         PresentationNodes = 700,
+        Characters = 200,
     }
 
     // The component representing triumphs and seals
@@ -73,5 +74,42 @@ namespace TitleReport.Data
         public int completionValue { get; set; }
 
         public int? recordCategoryScore {get; set;}
+    }
+
+    /// <summary>
+    /// https://bungie-net.github.io/multi/schema_Destiny-Misc-DestinyColor.html#schema_Destiny-Misc-DestinyColor
+    /// </summary>
+    public class DestinyColor
+    {
+        public byte red { get; set; }
+        public byte green { get; set; }
+        public byte blue { get; set; }
+        public byte alpha { get; set; }
+    }
+
+    /// <summary>
+    ///  https://bungie-net.github.io/multi/schema_Destiny-Entities-Characters-DestinyCharacterComponent.html#schema_Destiny-Entities-Characters-DestinyCharacterComponent
+    /// </summary>
+    public class CharacterComponent
+    {
+        public long membershipId { get; set; }
+
+        public int membershipType { get; set; }
+
+        public long characterId { get; set; }
+
+        public DateTime dateLastPlayed { get; set; }
+        public int light { get; set; }
+
+        public string emblemPath { get; set; } = "";
+
+        public string emblemBackgroundPath { get; set; } = "";
+
+        public uint emblemHash { get; set; }
+
+        public DestinyColor emblemColor { get; set; } = new();
+
+        public uint titleRecordHash { get; set; }
+
     }
 }

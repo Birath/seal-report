@@ -28,6 +28,7 @@ namespace TitleReport.Pages
 				}
 
 				var user = data.Response.Length == 1 ? data.Response.First() : data.Response!.FirstOrDefault(user => user.membershipType == user.crossSaveOverride);
+
 				return user;
 			}
 			else
@@ -37,22 +38,22 @@ namespace TitleReport.Pages
 			return null;
 		}
 
-		public async Task<IEnumerable<Seal>> GetDestinyData(UserInfoCard user)
-		{
-			if (_dataBaseManager is null) return Enumerable.Empty<Seal>();
-
-			var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.membershipType}/Profile/{user.membershipId:D}/?components={ComponentType.Records},{ComponentType.PresentationNodes}");
+		public async Task<DestinyProfile?> GetDestinyProfile(UserInfoCard user)
+        {
+			var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.membershipType}/Profile/{user.membershipId:D}/?components={ComponentType.Records},{ComponentType.PresentationNodes},{ComponentType.Characters}");
 			var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyProfile>>(uri);
 
 			if (response is null || response.ErrorStatus != BungieErrorStatus.Success || response.Response is null)
 			{
 				Console.Error.WriteLine("Failed to read profile");
-				return Enumerable.Empty<Seal>();
+				return null;
 			}
+			return response.Response;
+		}
 
-			var profile = response.Response;
-			var recordsData = profile.profileRecords?.data;
-			if (recordsData is null) return Enumerable.Empty<Seal>();
+		public async Task<IEnumerable<Seal>> GetUserSeals(RecordsComponent recordsData)
+		{
+			if (_dataBaseManager is null) return Enumerable.Empty<Seal>();
 
 			var records = recordsData.records;
 
@@ -76,49 +77,67 @@ namespace TitleReport.Pages
 				}
 				var triumphs = await GetSealTriumphs(sealNode, records);
 				var complete = profileSeal.state.HasFlag(RecordState.CanEquipTitle);
-				bool isLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash);
+				var isLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash);
+
+				var sealProperties = FilterProperty.None;
+				if (complete)
+				{
+					sealProperties.Add(FilterProperty.Complete);
+				} else
+                {
+					sealProperties.Add(FilterProperty.Incomplete);
+				}
+				if (isLegacy)
+				{
+					sealProperties.Add(FilterProperty.Legacy);
+				} else
+                {
+					sealProperties.Add(FilterProperty.Current);
+				}
+
+				if (RaidSealNames.Contains(sealNode.displayProperties.name))
+				{
+					sealProperties.Add(FilterProperty.Raid);
+				}
+				bool isGilded = false;
+				int gildedCount = 0;
+				if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)
+				{
+					if (records.TryGetValue(gildingHash, out var gildingTracking))
+					{
+						isGilded = !gildingTracking.state.HasFlag(RecordState.ObjectiveNotCompleted);
+						gildedCount = gildingTracking.completedCount ?? 0;
+						if (gildedCount > 0)
+						{
+							sealProperties.Add(FilterProperty.Gilded);
+						} else
+                        {
+							sealProperties.Add(FilterProperty.Gildable);
+						}
+					}
+				}
 
 				var seal = new Seal(
 					sealDefinition.titleInfo.titlesByGender["Male"],
 					sealNode.displayProperties.name,
 					sealNode.displayProperties.description,
+					sealProperties,
 					new Uri($"{Constants.BungieManifestEndpoint}{sealNode.originalIcon}"),
 					triumphs
-				);
-
-				if (complete)
-				{
-					seal.FilterProperties.Add("complete");
-				}
-				if (isLegacy)
-				{
-					seal.FilterProperties.Add("legacy");
-				}
-
-				if (RaidSealNames.Contains(seal.Name))
+				)
                 {
-					seal.FilterProperties.Add("raid");
-                }
+					IsGildedCurrentSeason = isGilded,
+					GildedCount = gildedCount,
+                };
 
-				if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)
-				{
-					if (records.TryGetValue(gildingHash, out var gildingTracking))
-					{
-						seal.IsGildedCurrentSeason = !gildingTracking.state.HasFlag(RecordState.ObjectiveNotCompleted);
-						seal.GildedCount = gildingTracking.completedCount ?? 0;
-						if (seal.GildedCount > 0)
-                        {
-							seal.FilterProperties.Add("gilded");
-                        }
-					}
-				}
+				
 				profileSeals.Add(seal);
 			}
 
 			var sortedTitles = profileSeals.OrderByDescending(seal => seal.IsGildedCurrentSeason)
 						.ThenByDescending(seal => seal.GildedCount)
-						.ThenByDescending(seal => seal.FilterProperties.Contains("complete"))
-						.ThenBy(seal => seal.FilterProperties.Contains("legacy"));
+						.ThenByDescending(seal => seal.ActiveProperties.HasFlag(FilterProperty.Complete))
+						.ThenBy(seal => seal.ActiveProperties.HasFlag(FilterProperty.Legacy));
 
 			return sortedTitles;
 		}
@@ -159,9 +178,9 @@ namespace TitleReport.Pages
 		public string Description { get; }
 		public Uri Icon { get; }
 
-		public bool IsComplete => FilterProperties.Contains("complete");
+		public bool IsComplete => ActiveProperties.HasFlag(FilterProperty.Complete);
 
-		public bool IsLegacy => FilterProperties.Contains("legacy");
+		public bool IsLegacy => ActiveProperties.HasFlag(FilterProperty.Legacy);
 
 		public bool IsGildedCurrentSeason { get; set; }
 
@@ -169,13 +188,14 @@ namespace TitleReport.Pages
 
 		public IEnumerable<Triumph> RequiredTriumphs { get; }
 
-		public HashSet<string> FilterProperties { get; } = new HashSet<string>();
+		public FilterProperty ActiveProperties { get; }
 
-		public Seal(string title, string name, string description, Uri icon, IEnumerable<Triumph> triumphs)
+		public Seal(string title, string name, string description, FilterProperty properties, Uri icon, IEnumerable<Triumph> triumphs)
 		{
 			Title = title;
 			Name = name;
 			Description = description;
+			ActiveProperties = properties;
 			Icon = icon;
 			RequiredTriumphs = triumphs;
 		}
@@ -197,4 +217,33 @@ namespace TitleReport.Pages
 			CompletionPercentage = completion;
 		}
 	}
+
+    [Flags]
+	public enum FilterProperty
+	{
+		None = 0,
+		Complete = 1 ,
+		Incomplete = 2,
+		Legacy = 4,
+		Gilded = 8,
+		Gildable = 16,
+		Raid = 32,
+		Pve = 64,
+		Pvp = 128,
+        Current = 256,
+    }
+
+	public static class FilterPropertiesExtensions
+	{ 
+		public static void Add(ref this FilterProperty properties, FilterProperty property) 
+		{
+			properties |= property;
+		}
+
+		public static void Remove(ref this FilterProperty properties, FilterProperty property)
+        {
+			properties &= ~property;
+        }
+	}
+
 }

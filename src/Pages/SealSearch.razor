@@ -16,8 +16,8 @@
 <PageTitle>Seal Report</PageTitle>
 
 <div class="container-fluid">
-	<div class="row gx-1 align-content-center">
-		<div class="col-6 offset-3 d-flex align-self-center">
+	<div class="row gx-1 justify-content-center">
+		<div class="col-12 col-sm-6 d-flex align-self-center">
 			<FluentTextField class="flex-fill" @bind-Value="bungieName" Placeholder="Bungie Name" />
 			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="OnSearch">Search</FluentButton>
 		</div>
@@ -29,13 +29,13 @@
 		<FluentProgressRing class="align-self-center" />
 	</div>
 }
-@if (!_isLoadingTitles && _seals != null)
+@if (!_isLoadingTitles && _seals.Any())
 {
 	<div class="container-xl mt-2">
 		<div class="row justify-content-center mb-2">
 			<div class="col-12 d-flex justify-content-center">
 				<FluentToolbar>
-					@foreach (var property in AllFilterProperties)
+					@foreach (var property in Enum.GetValues<FilterProperty>().Skip(1))
 				   {
 						<FluentCheckbox Value="@(IsPropertyActive(property))" @onchange="@((ChangeEventArgs __e) => ToggleFilterProperty(property))">@property</FluentCheckbox>
 				   }
@@ -106,20 +106,7 @@
 
 	private bool _showLegacy = false;
 
-	public string[] AllFilterProperties =
-		{
-			"complete",
-			"legacy",
-			"gilded",
-			"raid"
-	};
-
-	public HashSet<string> ActiveFilterProperties { get; } = new HashSet<string>()
-	{
-		"complete",
-		"legacy",
-		"gilded",
-	};
+	private FilterProperty _activeFilter = FilterProperty.Complete;
 
 	private IndexedDbManager? _dataBaseManager;
 
@@ -146,13 +133,28 @@
 		_seals.Clear();
 		try
 		{
-			var userData = await SearchGuardianAsync(searchData!);
-			if (userData is null)
+			var userInfo = await SearchGuardianAsync(searchData!);
+			if (userInfo is null)
 			{
 				Console.Error.WriteLine($"Could not find user data for {bungieName}");
 				return;
 			}
-			var userSeals = await GetDestinyData(userData);
+
+			var profile = await GetDestinyProfile(userInfo);
+
+			if (profile is null)
+			{
+				Console.Error.WriteLine($"Failed to get profile info for {bungieName}");
+				return;
+			}
+
+			if (profile.profileRecords is null || profile.profileRecords.data is null)
+			{
+				Console.Error.WriteLine($"Failed to get profile records for {bungieName}");
+				return;
+			}
+
+			var userSeals = await GetUserSeals(profile.profileRecords.data);
 			_seals.AddRange(userSeals);
 		}
 		finally
@@ -165,28 +167,15 @@
 
 	private bool Filter(Seal seal)
 	{
-		if (ActiveFilterProperties.Count == 0) return true;
-		foreach (var activeProperty in ActiveFilterProperties)
-		{
-			if (seal.FilterProperties.Contains(activeProperty)) {
-				return true;
-			}
-		}
-		return false;
+		return (seal.ActiveProperties & _activeFilter) == _activeFilter;
 	}
 
-	private void ToggleFilterProperty(string property)
+	private void ToggleFilterProperty(FilterProperty property)
 	{
-		if (ActiveFilterProperties.Contains(property))
-		{
-			ActiveFilterProperties.Remove(property);
-		} else
-		{
-			ActiveFilterProperties.Add(property);
-		}
+		_activeFilter ^= property;
 	}
 
-	private bool IsPropertyActive(string property) => ActiveFilterProperties.Contains(property);
+	private bool IsPropertyActive(FilterProperty property) => _activeFilter.HasFlag(property);
 
 	public class BungieName
 	{
