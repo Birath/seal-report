@@ -1,0 +1,14 @@
+﻿<h3>ProfileOverview</h3>
+
+@code {
+	[Parameter, EditorRequired]
+	public string UserName { get; set; } = "";
+
+	[Parameter, EditorRequired]
+	public string EmblemUrl { get; set; } = "";
+
+	public List<(string SealUrl, bool IsComplete)> Seals { get; } = new List<(string SealUrl, bool IsComplete)>();
+
+
+
+}

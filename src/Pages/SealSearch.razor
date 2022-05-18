@@ -108,11 +108,11 @@
 
 	private FilterProperty _activeFilter = FilterProperty.Complete;
 
-	private IndexedDbManager? _dataBaseManager;
+	public IndexedDbManager? DataBaseManager { get; private set; }
 
 	protected override async Task OnInitializedAsync()
 	{
-		_dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
+		DataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
 	}
 
 	public async Task OnSearch()

@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Json;
 
+using TitleReport.Components.ProfileOverview;
 using TitleReport.Data;
 
 namespace TitleReport.Pages
@@ -51,9 +52,22 @@ namespace TitleReport.Pages
 			return response.Response;
 		}
 
-		public async Task<IEnumerable<Seal>> GetUserSeals(RecordsComponent recordsData)
+		public async Task<ProfileOverviewData> GetUserProfileOverview(string userName, IEnumerable<CharacterComponent> characters, RecordsComponent recordsData)
+        {
+			var latestPlayed = characters.MaxBy(character => character.dateLastPlayed);
+
+			var equipedSealDefinition = await DataBaseManager!.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", latestPlayed!.titleRecordHash);
+			
+			var equipedSealNode = await GetSealPresentationNodeByRecordHash(equipedSealDefinition.hash);
+
+            return equipedSealNode is null
+                ? new ProfileOverviewData(userName, latestPlayed!.emblemBackgroundPath, new Seal("ERROR", "ERROR", "ERROR", FilterProperty.None, "", Array.Empty<Triumph>()))
+                : new ProfileOverviewData(userName, latestPlayed!.emblemBackgroundPath, CreateSeal(recordsData, equipedSealNode, equipedSealDefinition, Array.Empty<Triumph>()));
+        }
+
+        public async Task<IEnumerable<Seal>> GetUserSeals(RecordsComponent recordsData)
 		{
-			if (_dataBaseManager is null) return Enumerable.Empty<Seal>();
+			if (DataBaseManager is null) return Enumerable.Empty<Seal>();
 
 			var records = recordsData.records;
 
@@ -61,80 +75,27 @@ namespace TitleReport.Pages
 
 			var profileSeals = new List<Seal>();
 
-			var sealPresentationNodes = await _dataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
-			var sealRootNode = await _dataBaseManager.GetRecordByIndexAsync<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
+			var sealPresentationNodes = await DataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
+			var sealRootNode = await DataBaseManager.GetRecordByIndexAsync<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
 			foreach (var sealNode in sealPresentationNodes)
-			{
-				if (sealNode is null || sealNode.completionRecordHash is null) continue;
+            {
+                if (sealNode is null || sealNode.completionRecordHash is null) continue;
 
-				var profileSeal = records[sealNode.completionRecordHash.Value];
-				var sealDefinition = await _dataBaseManager.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
+                var sealDefinition = await DataBaseManager.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
 
-				if (sealDefinition is null)
-				{
-					Console.Error.WriteLine($"Could not find Seal with hash {sealNode.completionRecordHash} in Record store");
-					continue;
-				}
-				var triumphs = await GetSealTriumphs(sealNode, records);
-				var complete = profileSeal.state.HasFlag(RecordState.CanEquipTitle);
-				var isLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash);
-
-				var sealProperties = FilterProperty.None;
-				if (complete)
-				{
-					sealProperties.Add(FilterProperty.Complete);
-				} else
+                if (sealDefinition is null)
                 {
-					sealProperties.Add(FilterProperty.Incomplete);
-				}
-				if (isLegacy)
-				{
-					sealProperties.Add(FilterProperty.Legacy);
-				} else
-                {
-					sealProperties.Add(FilterProperty.Current);
-				}
+                    Console.Error.WriteLine($"Could not find Seal with hash {sealNode.completionRecordHash} in Record store");
+                    continue;
+                }
 
-				if (RaidSealNames.Contains(sealNode.displayProperties.name))
-				{
-					sealProperties.Add(FilterProperty.Raid);
-				}
-				bool isGilded = false;
-				int gildedCount = 0;
-				if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)
-				{
-					if (records.TryGetValue(gildingHash, out var gildingTracking))
-					{
-						isGilded = !gildingTracking.state.HasFlag(RecordState.ObjectiveNotCompleted);
-						gildedCount = gildingTracking.completedCount ?? 0;
-						if (gildedCount > 0)
-						{
-							sealProperties.Add(FilterProperty.Gilded);
-						} else
-                        {
-							sealProperties.Add(FilterProperty.Gildable);
-						}
-					}
-				}
+                var triumphs = await GetSealTriumphs(sealNode, records);
+                var seal = CreateSeal(recordsData, sealNode, sealDefinition, triumphs);
 
-				var seal = new Seal(
-					sealDefinition.titleInfo.titlesByGender["Male"],
-					sealNode.displayProperties.name,
-					sealNode.displayProperties.description,
-					sealProperties,
-					new Uri($"{Constants.BungieManifestEndpoint}{sealNode.originalIcon}"),
-					triumphs
-				)
-                {
-					IsGildedCurrentSeason = isGilded,
-					GildedCount = gildedCount,
-                };
+                profileSeals.Add(seal);
+            }
 
-				
-				profileSeals.Add(seal);
-			}
-
-			var sortedTitles = profileSeals.OrderByDescending(seal => seal.IsGildedCurrentSeason)
+            var sortedTitles = profileSeals.OrderByDescending(seal => seal.IsGildedCurrentSeason)
 						.ThenByDescending(seal => seal.GildedCount)
 						.ThenByDescending(seal => seal.ActiveProperties.HasFlag(FilterProperty.Complete))
 						.ThenBy(seal => seal.ActiveProperties.HasFlag(FilterProperty.Legacy));
@@ -142,13 +103,75 @@ namespace TitleReport.Pages
 			return sortedTitles;
 		}
 
-		private async Task<IEnumerable<Triumph>> GetSealTriumphs(PresentationNodeDefinition seal, Dictionary<uint, RecordComponent> userRecords)
+        private Seal CreateSeal(RecordsComponent recordsData, PresentationNodeDefinition sealNode, RecordDefinition sealDefinition, IEnumerable<Triumph> triumphs)
+        {
+			var sealComponent = recordsData.records[sealNode.completionRecordHash!.Value];
+            var complete = sealComponent.state.HasFlag(RecordState.CanEquipTitle);
+            var isLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash);
+
+            var sealProperties = FilterProperty.None;
+            if (complete)
+            {
+                sealProperties.Add(FilterProperty.Complete);
+            }
+            else
+            {
+                sealProperties.Add(FilterProperty.Incomplete);
+            }
+            if (isLegacy)
+            {
+                sealProperties.Add(FilterProperty.Legacy);
+            }
+            else
+            {
+                sealProperties.Add(FilterProperty.Current);
+            }
+
+            if (RaidSealNames.Contains(sealNode.displayProperties.name))
+            {
+                sealProperties.Add(FilterProperty.Raid);
+            }
+            bool isGilded = false;
+            int gildedCount = 0;
+            if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)
+            {
+                if (recordsData.records.TryGetValue(gildingHash, out var gildingTracking))
+                {
+                    isGilded = !gildingTracking.state.HasFlag(RecordState.ObjectiveNotCompleted);
+                    gildedCount = gildingTracking.completedCount ?? 0;
+                    if (gildedCount > 0)
+                    {
+                        sealProperties.Add(FilterProperty.Gilded);
+                    }
+                    else
+                    {
+                        sealProperties.Add(FilterProperty.Gildable);
+                    }
+                }
+            }
+
+            var seal = new Seal(
+                sealDefinition.titleInfo.titlesByGender["Male"],
+                sealNode.displayProperties.name,
+                sealNode.displayProperties.description,
+                sealProperties,
+                $"{Constants.BungieManifestEndpoint}{sealNode.originalIcon}",
+                triumphs
+            )
+            {
+                IsGildedCurrentSeason = isGilded,
+                GildedCount = gildedCount,
+            };
+            return seal;
+        }
+
+        private async Task<IEnumerable<Triumph>> GetSealTriumphs(PresentationNodeDefinition seal, Dictionary<uint, RecordComponent> userRecords)
 		{
 			var triumphs = new List<Triumph>();
 
 			foreach (var triumphNode in seal.children.records)
 			{
-				var triumph = await _dataBaseManager!.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", triumphNode.recordHash);
+				var triumph = await DataBaseManager!.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", triumphNode.recordHash);
 				if (!userRecords.ContainsKey(triumphNode.recordHash))
 				{
 					Console.WriteLine($"Missing: {triumph.displayProperties.name}");
@@ -169,6 +192,12 @@ namespace TitleReport.Pages
 			}
 			return triumphs.OrderBy(t => t.IsComplete);
 		}
+	
+		private async Task<PresentationNodeDefinition?> GetSealPresentationNodeByRecordHash(uint hash)
+        {
+			var sealPresentationNodes = await DataBaseManager!.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
+			return sealPresentationNodes.FirstOrDefault(seal => seal.completionRecordHash == hash);
+		}
 	}
 
 	public class Seal
@@ -176,7 +205,7 @@ namespace TitleReport.Pages
 		public string Title { get; }
 		public string Name { get; }
 		public string Description { get; }
-		public Uri Icon { get; }
+		public string Icon { get; }
 
 		public bool IsComplete => ActiveProperties.HasFlag(FilterProperty.Complete);
 
@@ -190,7 +219,7 @@ namespace TitleReport.Pages
 
 		public FilterProperty ActiveProperties { get; }
 
-		public Seal(string title, string name, string description, FilterProperty properties, Uri icon, IEnumerable<Triumph> triumphs)
+		public Seal(string title, string name, string description, FilterProperty properties, string icon, IEnumerable<Triumph> triumphs)
 		{
 			Title = title;
 			Name = name;
