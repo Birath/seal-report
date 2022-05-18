@@ -1,4 +1,28 @@
-﻿<h3>ProfileOverview</h3>
+﻿@using TitleReport.Pages
+
+<div class=" w-100 position-relative" style="background-image: url(@EmblemUrl); background-size: cover; max-width: 474px; height: 96px;">
+	<div class="d-inline-flex flex-row position-absolute" style="left: 20%">
+
+	<div class="m-1" >
+		<h3 style="color: white" class="">@UserName</h3>
+		<div class="position-relative d-inline-block">
+			<em>@EquipedSeal!.Title</em>@if (EquipedSeal.GildedCount > 0)
+			{
+				<span class="destiny-symbol"> <sup style="font-size:10px;">@EquipedSeal.GildedCount</sup></span>	
+			}
+		</div>
+	</div>
+	<div class="m-2 flex-grow-1">
+		<div class="d-flex flex-row-reverse flex-wrap ms-auto" style="max-width: calc(26px * 8)">
+			@foreach(var seal in Seals.OrderByDescending(s => s.IsComplete))
+			{
+				<img id="@seal.Name" class="mb-1" src="@seal.Icon" width="26" style="@(seal.IsComplete ? "" : "filter: grayscale(1)")"/>
+				<FluentTooltip anchor="@seal.Name">@seal.Title</FluentTooltip>
+			}
+		</div>
+	</div>
+	</div>
+</div>
 
 @code {
 	[Parameter, EditorRequired]
@@ -7,8 +31,10 @@
 	[Parameter, EditorRequired]
 	public string EmblemUrl { get; set; } = "";
 
-	public List<(string SealUrl, bool IsComplete)> Seals { get; } = new List<(string SealUrl, bool IsComplete)>();
+	[Parameter, EditorRequired]
+	public Seal? EquipedSeal { get; set; }
 
-
+	[Parameter, EditorRequired]
+	public List<Seal> Seals { get; set; } = new List<Seal>();
 
 }

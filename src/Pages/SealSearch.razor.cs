@@ -14,6 +14,8 @@ namespace TitleReport.Pages
 				"Vow of the Disciple",
 				"Deep Stone Crypt",
 				"Vault of Glass",
+				"Black Armory",
+				"A Shadow Rises"
 			};
 
 		public async Task<UserInfoCard?> SearchGuardianAsync(BungieName userRequest)
@@ -62,7 +64,7 @@ namespace TitleReport.Pages
 
             return equipedSealNode is null
                 ? new ProfileOverviewData(userName, latestPlayed!.emblemBackgroundPath, new Seal("ERROR", "ERROR", "ERROR", FilterProperty.None, "", Array.Empty<Triumph>()))
-                : new ProfileOverviewData(userName, latestPlayed!.emblemBackgroundPath, CreateSeal(recordsData, equipedSealNode, equipedSealDefinition, Array.Empty<Triumph>()));
+                : new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.emblemBackgroundPath}", CreateSeal(recordsData, equipedSealNode, equipedSealDefinition, Array.Empty<Triumph>()));
         }
 
         public async Task<IEnumerable<Seal>> GetUserSeals(RecordsComponent recordsData)
@@ -254,12 +256,10 @@ namespace TitleReport.Pages
 		Complete = 1 ,
 		Incomplete = 2,
 		Legacy = 4,
-		Gilded = 8,
-		Gildable = 16,
-		Raid = 32,
-		Pve = 64,
-		Pvp = 128,
-        Current = 256,
+        Current = 8,
+		Gilded = 16,
+		Gildable = 32,
+		Raid = 64,
     }
 
 	public static class FilterPropertiesExtensions

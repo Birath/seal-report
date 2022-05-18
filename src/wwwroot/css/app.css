@@ -1,5 +1,10 @@
 @import url('open-iconic/font/css/open-iconic-bootstrap.min.css');
 
+:root {
+    --gilded-title-text-color: #a68455;
+    --title-text-color: #732881;
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     margin: 0;
@@ -80,3 +85,5 @@ a, .btn-link {
     .blazor-error-boundary::after {
         content: "An error has occurred."
     }
+
+

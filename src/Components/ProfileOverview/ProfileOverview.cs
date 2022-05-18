@@ -7,7 +7,7 @@ namespace TitleReport.Components.ProfileOverview
         public string UserName { get; }
         public string EmblemUrl { get; }
         public Seal EquipedSeal { get;}
-        public List<(string SealUrl, bool IsComplete)> Seals { get; } = new List<(string SealUrl, bool IsComplete)>();
+        public List<Seal> Seals { get; } = new List<Seal>();
 
         public ProfileOverviewData(string userName, string emblemUrl, Seal equipedSeal)
         {
