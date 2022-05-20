@@ -1,26 +1,28 @@
 ﻿@using TitleReport.Pages
 
-<div class=" w-100 position-relative" style="background-image: url(@EmblemUrl); background-size: cover; max-width: 474px; height: 96px;">
-	<div class="d-inline-flex flex-row position-absolute" style="left: 20%">
-
-	<div class="m-1" >
-		<h3 style="color: white" class="">@UserName</h3>
-		<div class="position-relative d-inline-block">
-			<em>@EquipedSeal!.Title</em>@if (EquipedSeal.GildedCount > 0)
+<div class="w-100 position-relative" style="background-image: url(@EmblemUrl); background-size: cover; max-width: 474px; height: 96px;" role="img" title="Emblem image">
+	<div class="d-inline-flex flex-row position-absolute" style="left: 20%; width: 80%">
+		<div class="m-1" >
+			<h3 class="text-white">@UserName</h3>
+			@if (EquippedSeal != null)
 			{
-				<span class="destiny-symbol"> <sup style="font-size:10px;">@EquipedSeal.GildedCount</sup></span>	
+				<div class="position-relative d-inline-block text-white">
+					<em>@EquippedSeal!.Title</em>@if (EquippedSeal.GildedCount > 0)
+					{
+						<span class="text-white destiny-symbol"> <sup style="font-size:10px;">@EquippedSeal.GildedCount</sup></span>	
+					}
+				</div>
 			}
 		</div>
-	</div>
-	<div class="m-2 flex-grow-1">
-		<div class="d-flex flex-row-reverse flex-wrap ms-auto" style="max-width: calc(26px * 8)">
-			@foreach(var seal in Seals.OrderByDescending(s => s.IsComplete))
-			{
-				<img id="@seal.Name" class="mb-1" src="@seal.Icon" width="26" style="@(seal.IsComplete ? "" : "filter: grayscale(1)")"/>
-				<FluentTooltip anchor="@seal.Name">@seal.Title</FluentTooltip>
-			}
+		<div class="m-2 flex-grow-1">
+			<div class="d-flex flex-row-reverse flex-wrap ms-auto" style="max-width: calc(26px * 8)">
+				@foreach(var seal in Seals.Where(s => s.IsComplete))
+				{
+					<img id="@seal.Name" class="mb-1" src="@seal.Icon" width="26" style="@(seal.IsComplete ? "" : "filter: grayscale(1)")" alt="@seal.Name icon"/>
+					<FluentTooltip anchor="@seal.Name">@seal.Title</FluentTooltip>
+				}
+			</div>
 		</div>
-	</div>
 	</div>
 </div>
 
@@ -32,7 +34,7 @@
 	public string EmblemUrl { get; set; } = "";
 
 	[Parameter, EditorRequired]
-	public Seal? EquipedSeal { get; set; }
+	public Seal? EquippedSeal { get; set; }
 
 	[Parameter, EditorRequired]
 	public List<Seal> Seals { get; set; } = new List<Seal>();

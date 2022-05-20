@@ -1,5 +1,5 @@
 ﻿using System.Net.Http.Json;
-
+using System.Runtime.InteropServices;
 using TitleReport.Components.ProfileOverview;
 using TitleReport.Data;
 
@@ -7,7 +7,7 @@ namespace TitleReport.Pages
 {
     public partial class SealSearch
     {
-		public readonly string[] RaidSealNames = 
+	    private readonly string[] _raidSealNames = 
 			{
 				"Last Wish",
 				"Garden of Salvation",
@@ -26,7 +26,7 @@ namespace TitleReport.Pages
 				var data = await userResponse.Content.ReadFromJsonAsync<BungieApiResponse<UserInfoCard[]>>();
 				if (data is null || data.Message != "Ok" || data.Response is null)
 				{
-					Console.Error.WriteLine($"Failed to fetch user data from Bungie for {bungieName}");
+					await Console.Error.WriteLineAsync($"Failed to fetch user data from Bungie for {_bungieName}");
 					return null;
 				}
 
@@ -36,7 +36,7 @@ namespace TitleReport.Pages
 			}
 			else
 			{
-				Console.Error.WriteLine(userResponse.ReasonPhrase);
+				await Console.Error.WriteLineAsync(userResponse.ReasonPhrase);
 			}
 			return null;
 		}
@@ -58,13 +58,13 @@ namespace TitleReport.Pages
         {
 			var latestPlayed = characters.MaxBy(character => character.dateLastPlayed);
 
-			var equipedSealDefinition = await DataBaseManager!.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", latestPlayed!.titleRecordHash);
+			var equippedSealDefinition = await DataBaseManager!.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", latestPlayed!.titleRecordHash);
 			
-			var equipedSealNode = await GetSealPresentationNodeByRecordHash(equipedSealDefinition.hash);
+			var equippedSealNode = await GetSealPresentationNodeByRecordHash(equippedSealDefinition.hash);
 
-            return equipedSealNode is null
+			return equippedSealNode is null
                 ? new ProfileOverviewData(userName, latestPlayed!.emblemBackgroundPath, new Seal("ERROR", "ERROR", "ERROR", FilterProperty.None, "", Array.Empty<Triumph>()))
-                : new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.emblemBackgroundPath}", CreateSeal(recordsData, equipedSealNode, equipedSealDefinition, Array.Empty<Triumph>()));
+                : new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.emblemBackgroundPath}", CreateSeal(recordsData, equippedSealNode, equippedSealDefinition, Array.Empty<Triumph>()));
         }
 
         public async Task<IEnumerable<Seal>> GetUserSeals(RecordsComponent recordsData)
@@ -73,15 +73,13 @@ namespace TitleReport.Pages
 
 			var records = recordsData.records;
 
-			if (records is null) return Enumerable.Empty<Seal>();
-
 			var profileSeals = new List<Seal>();
 
 			var sealPresentationNodes = await DataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
 			var sealRootNode = await DataBaseManager.GetRecordByIndexAsync<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
 			foreach (var sealNode in sealPresentationNodes)
             {
-                if (sealNode is null || sealNode.completionRecordHash is null) continue;
+                if (sealNode?.completionRecordHash is null) continue;
 
                 var sealDefinition = await DataBaseManager.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
 
@@ -112,30 +110,16 @@ namespace TitleReport.Pages
             var isLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash);
 
             var sealProperties = FilterProperty.None;
-            if (complete)
-            {
-                sealProperties.Add(FilterProperty.Complete);
-            }
-            else
-            {
-                sealProperties.Add(FilterProperty.Incomplete);
-            }
-            if (isLegacy)
-            {
-                sealProperties.Add(FilterProperty.Legacy);
-            }
-            else
-            {
-                sealProperties.Add(FilterProperty.Current);
-            }
+            sealProperties.Add(complete ? FilterProperty.Complete : FilterProperty.Incomplete);
+            sealProperties.Add(isLegacy ? FilterProperty.Legacy : FilterProperty.Current);
 
-            if (RaidSealNames.Contains(sealNode.displayProperties.name))
+            if (_raidSealNames.Contains(sealNode.displayProperties.name))
             {
                 sealProperties.Add(FilterProperty.Raid);
             }
-            bool isGilded = false;
-            int gildedCount = 0;
-            if (sealDefinition.titleInfo.gildingTrackingRecordHash is uint gildingHash)
+            var isGilded = false;
+            var gildedCount = 0;
+            if (sealDefinition.titleInfo.gildingTrackingRecordHash is { } gildingHash)
             {
                 if (recordsData.records.TryGetValue(gildingHash, out var gildingTracking))
                 {

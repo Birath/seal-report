@@ -19,7 +19,7 @@
 <div class="container-fluid">
 	<div class="row gx-1 justify-content-center">
 		<div class="col-12 col-sm-6 d-flex align-self-center">
-			<FluentTextField class="flex-fill" @bind-Value="bungieName" Placeholder="Bungie Name" />
+			<FluentTextField class="flex-fill" @bind-Value="_bungieName" Placeholder="Bungie Name" />
 			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="OnSearch">Search</FluentButton>
 		</div>
 	</div>
@@ -30,32 +30,13 @@
 		<FluentProgressRing class="align-self-center" />
 	</div>
 }
-<!--
-<div class="container-xl mt-2">
-	<div class="row">
-		<div class="col-12 d-flex justify-content-center">
-			<div class="d-inline-flex flex-row w-100 " style="background-image: url(@ActiveProfile.EmblemUrl); background-size: cover; max-width: 474px; height: 96px;">
-				<h3 class="m-1">@ActiveProfile.UserName</h3>
-				<div class="m-2 flex-grow-1">
-					<div class="d-flex flex-row-reverse flex-wrap ms-auto" style="max-width: calc(26px * 8)">
-						@foreach(var seal in ActiveProfile.Seals.OrderByDescending(s => s.IsComplete))
-						{
-							<img id="@seal.Name" class="mb-1" src="@seal.Icon" width="26" style="@(seal.IsComplete ? "" : "filter: grayscale(1)")"/>
-							<FluentTooltip anchor="@seal.Name">@seal.Name</FluentTooltip>
-						}
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-</div>-->
 
-@if (!_isLoadingTitles && _seals.Any() && ActiveProfile != null) 
+@if (_hasLoadedProfile && !_isLoadingTitles && ActiveProfile != null) 
 {
 	<div class="container-xl mt-2">
 		<div class="row justify-content-center">
 			<div class="col-12 d-flex justify-content-center">
-				<ProfileOverview EmblemUrl="@(ActiveProfile.EmblemUrl)" UserName="@(ActiveProfile.UserName)" Seals="@(ActiveProfile.Seals)" EquipedSeal="@(ActiveProfile.EquipedSeal)" />
+				<ProfileOverview EmblemUrl="@(ActiveProfile.EmblemUrl)" UserName="@(ActiveProfile.UserName)" Seals="@(ActiveProfile.Seals)" EquippedSeal="@(ActiveProfile.EquipedSeal)" />
 			</div>
 		</div>
 		<div class="row justify-content-center mb-2">
@@ -93,7 +74,7 @@
 								<div class="d-flex">
 									@if (seal.IsLegacy)
 									{
-										<FluentBadge Appearance="Appearance.Accent">Unavailable</FluentBadge>
+										<FluentBadge Appearance="Appearance.Accent">Legacy</FluentBadge>
 									}
 								</div>
 							</div>
@@ -107,11 +88,9 @@
 								<FluentAccordion>
 									<FluentAccordionItem>
 										<div slot="start">Triumphs @seal.RequiredTriumphs.Count(t => t.IsComplete) / @seal.RequiredTriumphs.Count()</div>
-										@foreach (var trimump in seal.RequiredTriumphs)
+										@foreach (var triumph in seal.RequiredTriumphs)
 										{
-
-											<p style="@(trimump.IsComplete ? "color: green" : "color: red")">@trimump.Name - @trimump.CompletionPercentage</p>
-
+											<p style="@(triumph.IsComplete ? "color: green" : "color: red")">@triumph.Name - @triumph.CompletionPercentage</p>
 										}
 									</FluentAccordionItem>
 								</FluentAccordion>
@@ -126,9 +105,10 @@
 }
 
 @code {
-	private string? bungieName = "";
-	private List<Seal> _seals = new List<Seal>();
+	private string? _bungieName = "";
+	private readonly List<Seal> _seals = new List<Seal>();
 	private bool _isLoadingTitles = false;
+	private bool _hasLoadedProfile = false;
 
 	public ProfileOverviewData? ActiveProfile { get; private set; } = new ProfileOverviewData("TEST", "https://www.bungie.net/common/destiny2_content/icons/c612ec23a7f3b57042cb988788ef37a8.jpg", new Seal("TEST", "TEST", "TEST DESCRIPTION", FilterProperty.Complete, "ICON", Array.Empty<Triumph>()));
 
@@ -144,15 +124,15 @@
 
 	public async Task OnSearch()
 	{
-		if (string.IsNullOrEmpty(bungieName) || !bungieName.Contains('#'))
+		if (string.IsNullOrEmpty(_bungieName) || !_bungieName.Contains('#'))
 		{
-			Console.Error.WriteLine($"Invalid bungie name: {bungieName}");
+			await Console.Error.WriteLineAsync($"Invalid bungie name: {_bungieName}");
 			return;
 		}
 
-		if (!BungieName.TryParse(bungieName, out var searchData))
+		if (!BungieName.TryParse(_bungieName, out var searchData))
 		{
-			Console.Error.WriteLine($"Invalid bungie name: {bungieName}");
+			await Console.Error.WriteLineAsync($"Invalid bungie name: {_bungieName}");
 			return;
 		}
 
@@ -163,7 +143,7 @@
 			var userInfo = await SearchGuardianAsync(searchData!);
 			if (userInfo is null)
 			{
-				Console.Error.WriteLine($"Could not find user data for {bungieName}");
+				Console.Error.WriteLine($"Could not find user data for {_bungieName}");
 				return;
 			}
 
@@ -171,31 +151,36 @@
 
 			if (profile is null)
 			{
-				Console.Error.WriteLine($"Failed to get profile info for {bungieName}");
+				Console.Error.WriteLine($"Failed to get profile info for {_bungieName}");
 				return;
 			}
 
-			if (profile.profileRecords is null || profile.profileRecords.data is null)
+			if (profile.profileRecords?.data is null)
 			{
-				Console.Error.WriteLine($"Failed to get profile records for {bungieName}");
+				Console.Error.WriteLine($"Failed to get profile records for {_bungieName}");
 				return;
 			}
 
-			ActiveProfile = await GetUserProfileOverview(bungieName, profile.characters.data.Values, profile.profileRecords.data);
+			if (profile.characters?.data is null)
+			{
+				await Console.Error.WriteLineAsync($"Failed to get characters for {_bungieName}");
+				return;
+			}
+
+			ActiveProfile = await GetUserProfileOverview(userInfo.displayName, profile.characters.data.Values, profile.profileRecords.data);
 
 			var userSeals = await GetUserSeals(profile.profileRecords.data);
 			_seals.AddRange(userSeals);
 			ActiveProfile.Seals.Clear();
-			ActiveProfile.Seals.AddRange(userSeals
+			ActiveProfile.Seals.AddRange(_seals
 				.Where(seal => seal.ActiveProperties.HasFlag(FilterProperty.Current))
 			);
+			_hasLoadedProfile = true;
 		}
 		finally
 		{
 			_isLoadingTitles = false;
 		}
-
-
 	}
 
 	private bool Filter(Seal seal)
