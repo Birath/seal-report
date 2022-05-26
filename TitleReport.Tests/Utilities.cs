@@ -7,7 +7,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using TitleReport.Data;
+using BungieSharper.Entities;
+using BungieSharper.Entities.Destiny;
+using BungieSharper.Entities.Destiny.Definitions.Common;
+using BungieSharper.Entities.Destiny.Definitions.Presentation;
+using BungieSharper.Entities.Destiny.Definitions.Records;
+using BungieSharper.Entities.User;
 using TitleReport.Pages;
 
 namespace TitleReport.Tests
@@ -17,6 +22,7 @@ namespace TitleReport.Tests
         public static void SetupDefaultTestContext(TestContext ctx)
         {
             ctx.JSInterop.Mode = JSRuntimeMode.Strict;
+            ctx.JSInterop.SetupVoid("window.blazorDB.createDb", _ => true).SetVoidResult();
 
             ctx.Services.AddBlazoredLocalStorage();
             ctx.Services.AddBlazorDB(options =>
@@ -45,43 +51,47 @@ namespace TitleReport.Tests
 
         public static UserInfoCard DefaultTestUser => new()
         {
-            crossSaveOverride = 3,
-            membershipType = 3,
-            displayName = "TestUser0",
-            bungieGlobalDisplayNameCode = 9999,
-            bungieGlobalDisplayName = "TestUser0"
+            CrossSaveOverride = BungieMembershipType.TigerSteam,
+            MembershipType = BungieMembershipType.TigerSteam,
+            DisplayName = "TestUser0",
+            BungieGlobalDisplayNameCode = 9999,
+            BungieGlobalDisplayName = "TestUser0"
         };
 
         public static string DefaultUserName { get; } = "TestUser0#9999";
 
-        public static RecordDefinition DefaultSealDefinition { get; } = new()
+        public static DestinyRecordDefinition DefaultSealDefinition { get; } = new()
         {
-            titleInfo = new TitleInfo()
+            TitleInfo = new DestinyRecordTitleBlock()
             {
-                titlesByGender = new Dictionary<string, string>
-                    {
-                        { "Male", "Conqueror"}
+                TitlesByGender = new Dictionary<DestinyGender, string>
+                {
+                        { DestinyGender.Male, "Conqueror"}
                     }
             },
-            hash = 3464275895,
+            Hash = 3464275895,
         };
 
-        public static PresentationNodeDefinition DefaultSealPresentationNode { get; } = new()
+        public static DestinyPresentationNodeDefinition DefaultSealPresentationNode { get; } = new()
         {
-            completionRecordHash = DefaultSealDefinition.hash,
-            displayProperties = new DisplayPropertiesDefinition()
+            CompletionRecordHash = DefaultSealDefinition.Hash,
+            DisplayProperties = new DestinyDisplayPropertiesDefinition()
             {
-                name = "Conqueror",
-                description = "Complete all Grandmaster Triumphs.",
+                Name = "Conqueror",
+                Description = "Complete all Grandmaster Triumphs.",
             },
-            originalIcon = "/common/destiny2_content/icons/d3548d7e67c29eaeb451549f7c7fa30f.png"
+            OriginalIcon = "/common/destiny2_content/icons/d3548d7e67c29eaeb451549f7c7fa30f.png",
+            ParentNodeHashes = new []
+            {
+                UInt32.MaxValue, 
+            }
         };
         public static Seal DefaultSeal { get; } = new Seal(
             "Conqueror", 
-            DefaultSealPresentationNode.displayProperties.name, 
-            DefaultSealPresentationNode.displayProperties.description, 
+            DefaultSealPresentationNode.DisplayProperties.Name, 
+            DefaultSealPresentationNode.DisplayProperties.Description, 
             FilterProperty.Complete | FilterProperty.Legacy,
-            $"{Constants.BungieManifestEndpoint}{DefaultSealPresentationNode.originalIcon}", 
+            $"{Constants.BungieManifestEndpoint}{DefaultSealPresentationNode.OriginalIcon}", 
             Array.Empty<Triumph>()
         );
 

@@ -1,4 +1,12 @@
-﻿@using TitleReport.Data
+﻿@using System.Text
+@using System.Runtime.InteropServices
+@using System.Text.Json
+@using BungieSharper.Entities
+@using BungieSharper.Entities.Destiny.Components.Records
+@using BungieSharper.Entities.Destiny.Config
+@using BungieSharper.Entities.Destiny.Definitions.Presentation
+@using BungieSharper.Entities.Destiny.Definitions.Records
+@using BungieSharper.Entities.Exceptions
 @inject HttpClient Http
 @inject IBlazorDbFactory DbFactory
 @inject Blazored.LocalStorage.ILocalStorageService LocalStorage;
@@ -34,65 +42,57 @@ else
 		{
 			Http.DefaultRequestHeaders.Add("X-API-Key", Constants.BungieApiKey);
 		}
-
-		//if (await LocalStorage.ContainKeyAsync(nameof(baseLayerLuminance))) {
-		//	baseLayerLuminance = await LocalStorage.GetItemAsync<float>(nameof(baseLayerLuminance));
-		//}
+		
 
 		var _dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
-		var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyManifest>>($"{Constants.BungieApiEndpoint}/Destiny2/Manifest/");
-
-		if (response is null || response.ErrorStatus != BungieErrorStatus.Success)
+		var response = await Http.GetFromJsonAsync<ApiResponse<DestinyManifest>>($"{Constants.BungieApiEndpoint}/Destiny2/Manifest/");
+		
+		if (response is null || response.ErrorCode != PlatformErrorCodes.Success)
 		{
-			Console.Error.WriteLine("Failed to get Destiny Manifest");
+			await Console.Error.WriteLineAsync("Failed to get Destiny Manifest");
 			return;
 		}
-
+		
 		var manifest = response.Response;
 		if (manifest is null) return;
 
-		Console.Out.WriteLine($"Got destiny manifest: {manifest.version}");
+		await Console.Out.WriteLineAsync($"Got destiny manifest: {manifest.Version}");
 
 		var storedManifestVersion = await LocalStorage.GetItemAsync<string>("manifestVersion");
 
-		if (storedManifestVersion != manifest.version)
+		if (storedManifestVersion != manifest.Version)
 		{
-			await LocalStorage.SetItemAsync("manifestVersion", manifest.version);
-			var recordPath = manifest.jsonWorldComponentContentPaths["en"].DestinyRecordDefinition;
-			var presentationPath = manifest.jsonWorldComponentContentPaths["en"].DestinyPresentationNodeDefinition;
-			var lorePath = manifest.jsonWorldComponentContentPaths["en"].DestinyLoreDefinition;
-			var objectivePath = manifest.jsonWorldComponentContentPaths["en"].DestinyObjectiveDefinition;
+			await LocalStorage.SetItemAsync("manifestVersion", manifest.Version);
+			var recordPath = manifest.JsonWorldComponentContentPaths["en"]["DestinyRecordDefinition"];
+			var presentationPath = manifest.JsonWorldComponentContentPaths["en"]["DestinyPresentationNodeDefinition"];
 
 			// Create new client due to CORS error when using the injected one. (Maybe due to API key header?)
-			using (var client = new HttpClient())
+			using var client = new HttpClient();
+			var bulkAddTasks = new List<Task<BlazorDbEvent>>();
+				
+			var records = await client.GetFromJsonAsync<Dictionary<uint, DestinyRecordDefinition>>($"{Constants.BungieManifestEndpoint}{recordPath}");
+			if (records != null && records.Any())
 			{
-				var bulkAddTasks = new List<Task<BlazorDbEvent>>();
+				await _dataBaseManager.ClearTableAsync(Constants.RecordStoreName);
 
-				var records = await client.GetFromJsonAsync<Dictionary<uint, RecordDefinition>>($"{Constants.BungieManifestEndpoint}{recordPath}");
-				if (records != null && records.Any())
+				bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.RecordStoreName, records.Values));
+			}
+
+			var presentationNodes = await client.GetFromJsonAsync<Dictionary<uint, DestinyPresentationNodeDefinition>>($"{Constants.BungieManifestEndpoint}{presentationPath}");
+
+			if (presentationNodes != null && presentationNodes.Any())
+			{
+				await _dataBaseManager.ClearTableAsync(Constants.PresentationNodesStoreName);
+
+				bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.PresentationNodesStoreName, presentationNodes.Values));
+			}
+
+			foreach (var transactionResult in await Task.WhenAll(bulkAddTasks))
+			{
+				if (transactionResult.Failed)
 				{
-					await _dataBaseManager.ClearTableAsync(Constants.RecordStoreName);
-
-					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.RecordStoreName, records.Values));
+					Console.Error.WriteLine($"Bulk add {transactionResult.Transaction} failed : {transactionResult.Message}");
 				}
-
-				var presentationNodes = await client.GetFromJsonAsync<Dictionary<uint, PresentationNodeDefinition>>($"{Constants.BungieManifestEndpoint}{presentationPath}");
-
-				if (presentationNodes != null && presentationNodes.Any())
-				{
-					await _dataBaseManager.ClearTableAsync(Constants.PresentationNodesStoreName);
-
-					bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.PresentationNodesStoreName, presentationNodes.Values));
-				}
-
-				foreach (var transationResult in await Task.WhenAll(bulkAddTasks))
-				{
-					if (transationResult.Failed)
-					{
-						Console.Error.WriteLine($"Bulk add {transationResult.Transaction} failed : {transationResult.Message}");
-					}
-				}
-
 			}
 		}
 

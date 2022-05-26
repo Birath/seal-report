@@ -7,13 +7,11 @@ namespace TitleReport.Shared
 {
 	public partial class MainLayout
 	{
-        ErrorBoundary? errorBoundary;
-        FluentDesignSystemProvider fdsp = new();
-        LocalizationDirection? dir;
-        float? baseLayerLuminance;
-        
+        ErrorBoundary? _errorBoundary;
+        FluentDesignSystemProvider _fdsp = new();
+        LocalizationDirection? _dir = LocalizationDirection.ltr;
 
-        public void SwitchTheme()
+        private void SwitchTheme()
         {
             _activeTheme = _activeTheme.Type == ThemeType.Dark ? Theme.Light : Theme.Dark;
             IsLightTheme = _activeTheme.Type == ThemeType.Light;
@@ -22,7 +20,7 @@ namespace TitleReport.Shared
 
         protected override void OnParametersSet()
         {
-            errorBoundary?.Recover();
+            _errorBoundary?.Recover();
         }
     }
 
@@ -31,7 +29,8 @@ namespace TitleReport.Shared
         public ThemeType Type { get; set; }
         public float BaseLayerLuminance { get; set; }
         public Theme() { }
-        public Theme(ThemeType type, float baseLayerLuminance)
+
+        private Theme(ThemeType type, float baseLayerLuminance)
         {
             Type = type;
             BaseLayerLuminance = baseLayerLuminance;

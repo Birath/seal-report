@@ -9,8 +9,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
-using TitleReport.Data;
+using BungieSharper.Entities;
+using BungieSharper.Entities.User;
 using TitleReport.Pages;
 
 using Xunit;
@@ -22,7 +22,7 @@ namespace TitleReport.Tests
     {
         [Theory]
         [MemberData(nameof(Users))]
-        public void SearchParsesUserCorretly(string name, UserInfoCard expected)
+        public void SearchParsesUserCorretly(string name, UserInfoCard? expected)
         {
             using var ctx = new TestContext();
 
@@ -31,7 +31,7 @@ namespace TitleReport.Tests
             var mock = ctx.Services.AddMockHttpClient();
 
             mock.When(HttpMethod.Post, $"*/Destiny2/SearchDestinyPlayerByBungieName/-1/")
-                .RespondJson(new BungieApiResponse<UserInfoCard[]>
+                .RespondJson(new ApiResponse<UserInfoCard?[]>
                 {
                     Message = "Ok",
                     Response = expected is null ? Array.Empty<UserInfoCard>() : new[] { expected }
@@ -58,10 +58,10 @@ namespace TitleReport.Tests
             var mock = ctx.Services.AddMockHttpClient();
             var expected = Utilities.DefaultTestUser;
             var otherMemebershipUserData = Utilities.DefaultTestUser;
-            otherMemebershipUserData.membershipType = 1;
+            otherMemebershipUserData.MembershipType = BungieMembershipType.TigerXbox;
 
             mock.When(HttpMethod.Post, $"*/Destiny2/SearchDestinyPlayerByBungieName/-1/")
-                .RespondJson(new BungieApiResponse<UserInfoCard[]>
+                .RespondJson(new ApiResponse<UserInfoCard[]>
                 {
                     Message = "Ok",
                     Response = new[] { Utilities.DefaultTestUser, otherMemebershipUserData }

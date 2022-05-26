@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Blazored.LocalStorage" Version="4.1.5" />
+    <PackageReference Include="BungieSharper.Entities" Version="0.9.0" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="6.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="6.0.1" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Fast.Components.FluentUI" Version="1.4.0" />
@@ -24,6 +25,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BlazorDB\src\BlazorDB\BlazorDB.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Data" />
   </ItemGroup>
 
 </Project>

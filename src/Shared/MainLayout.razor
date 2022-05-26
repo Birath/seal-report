@@ -1,7 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @inject Blazored.LocalStorage.ILocalStorageService LocalStorage;
 
-<FluentDesignSystemProvider @ref=fdsp BaseLayerLuminance=@_activeTheme.BaseLayerLuminance class="pb-4 min-vh-100">
+<FluentDesignSystemProvider @ref=_fdsp BaseLayerLuminance=@_activeTheme.BaseLayerLuminance Direction="_dir" class="pb-4 min-vh-100">
 
     <div class="page ">        
         <main>

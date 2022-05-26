@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BungieSharper.Entities" Version="0.9.0" />
     <PackageReference Include="bunit" Version="1.7.7" />
     <PackageReference Include="ExpectedObjects" Version="3.5.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />

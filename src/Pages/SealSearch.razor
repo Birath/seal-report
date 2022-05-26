@@ -5,7 +5,6 @@
 @using System.Threading.Tasks
 @using Microsoft.Fast.Components.FluentUI
 @using TitleReport.Components.ProfileOverview
-@using TitleReport.Data
 @inject HttpClient Http
 @inject IBlazorDbFactory DbFactory
 @inject Blazored.LocalStorage.ILocalStorageService LocalStorage;
@@ -18,10 +17,10 @@
 
 <div class="container-fluid">
 	<div class="row gx-1 justify-content-center">
-		<div class="col-12 col-sm-6 d-flex align-self-center">
-			<FluentTextField class="flex-fill" @bind-Value="_bungieName" Placeholder="Bungie Name" />
-			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="OnSearch">Search</FluentButton>
-		</div>
+		<form class="col-12 col-sm-6 d-flex align-self-center">
+			<FluentTextField class="flex-fill" @bind-Value="_bungieName" Placeholder="Bungie Name" Autofocus="true" @onkeydown="Enter"/>
+			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="Search">Search</FluentButton>
+		</form>
 	</div>
 </div>
 @if (_isLoadingTitles)
@@ -109,41 +108,42 @@
 	private readonly List<Seal> _seals = new List<Seal>();
 	private bool _isLoadingTitles = false;
 	private bool _hasLoadedProfile = false;
-
+	private string? _currentlySearchingForName = "";
+	
 	public ProfileOverviewData? ActiveProfile { get; private set; } = new ProfileOverviewData("TEST", "https://www.bungie.net/common/destiny2_content/icons/c612ec23a7f3b57042cb988788ef37a8.jpg", new Seal("TEST", "TEST", "TEST DESCRIPTION", FilterProperty.Complete, "ICON", Array.Empty<Triumph>()));
 
 	private FilterProperty _activeFilter = FilterProperty.Complete;
 
 	public IndexedDbManager? DataBaseManager { get; private set; }
 
-
 	protected override async Task OnInitializedAsync()
 	{
 		DataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
 	}
 
-	public async Task OnSearch()
+	private async Task Search()
 	{
+		if (_isLoadingTitles && _currentlySearchingForName == _bungieName) return;
 		if (string.IsNullOrEmpty(_bungieName) || !_bungieName.Contains('#'))
 		{
-			await Console.Error.WriteLineAsync($"Invalid bungie name: {_bungieName}");
+			await Console.Out.WriteLineAsync($"Invalid bungie name: {_bungieName}");
 			return;
 		}
 
 		if (!BungieName.TryParse(_bungieName, out var searchData))
 		{
-			await Console.Error.WriteLineAsync($"Invalid bungie name: {_bungieName}");
+			await Console.Out.WriteLineAsync($"Invalid bungie name: {_bungieName}");
 			return;
 		}
 
 		_isLoadingTitles = true;
-		_seals.Clear();
+		_currentlySearchingForName = _bungieName;
 		try
 		{
 			var userInfo = await SearchGuardianAsync(searchData!);
 			if (userInfo is null)
 			{
-				Console.Error.WriteLine($"Could not find user data for {_bungieName}");
+				await Console.Out.WriteLineAsync($"Could not find user data for {_bungieName}");
 				return;
 			}
 
@@ -151,25 +151,26 @@
 
 			if (profile is null)
 			{
-				Console.Error.WriteLine($"Failed to get profile info for {_bungieName}");
+				await Console.Out.WriteLineAsync($"Failed to get profile info for {_bungieName}");
 				return;
 			}
 
-			if (profile.profileRecords?.data is null)
+			if (profile.ProfileRecords?.Data is null)
 			{
 				Console.Error.WriteLine($"Failed to get profile records for {_bungieName}");
 				return;
 			}
 
-			if (profile.characters?.data is null)
+			if (profile.Characters?.Data is null)
 			{
 				await Console.Error.WriteLineAsync($"Failed to get characters for {_bungieName}");
 				return;
 			}
 
-			ActiveProfile = await GetUserProfileOverview(userInfo.displayName, profile.characters.data.Values, profile.profileRecords.data);
+			ActiveProfile = await GetUserProfileOverview(userInfo.DisplayName, profile.Characters.Data.Values, profile.ProfileRecords.Data);
 
-			var userSeals = await GetUserSeals(profile.profileRecords.data);
+			var userSeals = await GetUserSeals(profile.ProfileRecords.Data);
+			_seals.Clear();
 			_seals.AddRange(userSeals);
 			ActiveProfile.Seals.Clear();
 			ActiveProfile.Seals.AddRange(_seals
@@ -212,14 +213,14 @@
 			bungieName = null;
 			var pieces = name.Split('#');
 			if (pieces.Length != 2) return false;
-			if (short.TryParse(pieces[1], out short parsedCode))
-			{
-				bungieName = new BungieName(pieces[0], parsedCode);
-				return true;
-			}
-			return false;
+			if (!short.TryParse(pieces[1], out var parsedCode)) return false;
+			bungieName = new BungieName(pieces[0], parsedCode);
+			return true;
 		}
 	}
 
-	
+	private Task Enter(KeyboardEventArgs obj)
+	{
+		return obj.Code is "Enter" or "NumpadEnter" ? Search() : Task.CompletedTask;
+	}
 }

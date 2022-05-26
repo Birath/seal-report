@@ -1,7 +1,15 @@
 ﻿using System.Net.Http.Json;
 using System.Runtime.InteropServices;
+using BungieSharper.Entities;
+using BungieSharper.Entities.Destiny;
+using BungieSharper.Entities.Destiny.Components.Records;
+using BungieSharper.Entities.Destiny.Definitions.Presentation;
+using BungieSharper.Entities.Destiny.Definitions.Records;
+using BungieSharper.Entities.Destiny.Entities.Characters;
+using BungieSharper.Entities.Destiny.Responses;
+using BungieSharper.Entities.Exceptions;
 using TitleReport.Components.ProfileOverview;
-using TitleReport.Data;
+using UserInfoCard = BungieSharper.Entities.User.UserInfoCard;
 
 namespace TitleReport.Pages
 {
@@ -23,14 +31,14 @@ namespace TitleReport.Pages
 			var userResponse = await Http.PostAsJsonAsync($"{Constants.BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", userRequest);
 			if (userResponse.IsSuccessStatusCode)
 			{
-				var data = await userResponse.Content.ReadFromJsonAsync<BungieApiResponse<UserInfoCard[]>>();
+				var data = await userResponse.Content.ReadFromJsonAsync<ApiResponse<UserInfoCard[]>>();
 				if (data is null || data.Message != "Ok" || data.Response is null)
 				{
 					await Console.Error.WriteLineAsync($"Failed to fetch user data from Bungie for {_bungieName}");
 					return null;
 				}
 
-				var user = data.Response.Length == 1 ? data.Response.First() : data.Response!.FirstOrDefault(user => user.membershipType == user.crossSaveOverride);
+				var user = data.Response.Length == 1 ? data.Response.First() : data.Response!.FirstOrDefault(user => user.MembershipType == user.CrossSaveOverride);
 
 				return user;
 			}
@@ -41,12 +49,12 @@ namespace TitleReport.Pages
 			return null;
 		}
 
-		public async Task<DestinyProfile?> GetDestinyProfile(UserInfoCard user)
+		public async Task<DestinyProfileResponse?> GetDestinyProfile(UserInfoCard user)
         {
-			var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.membershipType}/Profile/{user.membershipId:D}/?components={ComponentType.Records},{ComponentType.PresentationNodes},{ComponentType.Characters}");
-			var response = await Http.GetFromJsonAsync<BungieApiResponse<DestinyProfile>>(uri);
+			var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.MembershipType}/Profile/{user.MembershipId:D}/?components={DestinyComponentType.Records},{DestinyComponentType.PresentationNodes},{DestinyComponentType.Characters}");
+			var response = await Http.GetFromJsonAsync<ApiResponse<DestinyProfileResponse>>(uri);
 
-			if (response is null || response.ErrorStatus != BungieErrorStatus.Success || response.Response is null)
+			if (response is null || response.ErrorCode != PlatformErrorCodes.Success || response.Response is null)
 			{
 				Console.Error.WriteLine("Failed to read profile");
 				return null;
@@ -54,38 +62,38 @@ namespace TitleReport.Pages
 			return response.Response;
 		}
 
-		public async Task<ProfileOverviewData> GetUserProfileOverview(string userName, IEnumerable<CharacterComponent> characters, RecordsComponent recordsData)
+		public async Task<ProfileOverviewData> GetUserProfileOverview(string userName, IEnumerable<DestinyCharacterComponent> characters, DestinyProfileRecordsComponent recordsData)
         {
-			var latestPlayed = characters.MaxBy(character => character.dateLastPlayed);
+			var latestPlayed = characters.MaxBy(character => character.DateLastPlayed);
 
-			var equippedSealDefinition = await DataBaseManager!.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", latestPlayed!.titleRecordHash);
+			var equippedSealDefinition = await DataBaseManager!.GetRecordByIndexAsync<DestinyRecordDefinition>(Constants.RecordStoreName, "hash", latestPlayed!.TitleRecordHash);
 			
-			var equippedSealNode = await GetSealPresentationNodeByRecordHash(equippedSealDefinition.hash);
+			var equippedSealNode = await GetSealPresentationNodeByRecordHash(equippedSealDefinition.Hash);
 
 			return equippedSealNode is null
-                ? new ProfileOverviewData(userName, latestPlayed!.emblemBackgroundPath, new Seal("ERROR", "ERROR", "ERROR", FilterProperty.None, "", Array.Empty<Triumph>()))
-                : new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.emblemBackgroundPath}", CreateSeal(recordsData, equippedSealNode, equippedSealDefinition, Array.Empty<Triumph>()));
+                ? new ProfileOverviewData(userName, latestPlayed!.EmblemBackgroundPath, new Seal("ERROR", "ERROR", "ERROR", FilterProperty.None, "", Array.Empty<Triumph>()))
+                : new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.EmblemBackgroundPath}", CreateSeal(recordsData, equippedSealNode, equippedSealDefinition, Array.Empty<Triumph>()));
         }
 
-        public async Task<IEnumerable<Seal>> GetUserSeals(RecordsComponent recordsData)
+        public async Task<IEnumerable<Seal>> GetUserSeals(DestinyProfileRecordsComponent recordsData)
 		{
 			if (DataBaseManager is null) return Enumerable.Empty<Seal>();
 
-			var records = recordsData.records;
+			var records = recordsData.Records;
 
 			var profileSeals = new List<Seal>();
 
-			var sealPresentationNodes = await DataBaseManager.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
-			var sealRootNode = await DataBaseManager.GetRecordByIndexAsync<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.recordSealsRootNodeHash);
+			var sealPresentationNodes = await DataBaseManager.Where<DestinyPresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", DestinyPresentationNodeType.Records);
+			var sealRootNode = await DataBaseManager.GetRecordByIndexAsync<DestinyPresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.RecordSealsRootNodeHash);
 			foreach (var sealNode in sealPresentationNodes)
             {
-                if (sealNode?.completionRecordHash is null) continue;
+                if (sealNode?.CompletionRecordHash is null) continue;
 
-                var sealDefinition = await DataBaseManager.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", sealNode.completionRecordHash.Value);
+                var sealDefinition = await DataBaseManager.GetRecordByIndexAsync<DestinyRecordDefinition>(Constants.RecordStoreName, "hash", sealNode.CompletionRecordHash.Value);
 
                 if (sealDefinition is null)
                 {
-                    Console.Error.WriteLine($"Could not find Seal with hash {sealNode.completionRecordHash} in Record store");
+                    Console.Error.WriteLine($"Could not find Seal with hash {sealNode.CompletionRecordHash} in Record store");
                     continue;
                 }
 
@@ -103,28 +111,28 @@ namespace TitleReport.Pages
 			return sortedTitles;
 		}
 
-        private Seal CreateSeal(RecordsComponent recordsData, PresentationNodeDefinition sealNode, RecordDefinition sealDefinition, IEnumerable<Triumph> triumphs)
+        private Seal CreateSeal(DestinyProfileRecordsComponent recordsData, DestinyPresentationNodeDefinition sealNode, DestinyRecordDefinition sealDefinition, IEnumerable<Triumph> triumphs)
         {
-			var sealComponent = recordsData.records[sealNode.completionRecordHash!.Value];
-            var complete = sealComponent.state.HasFlag(RecordState.CanEquipTitle);
-            var isLegacy = !sealNode.parentNodeHashes.Contains(recordsData.recordSealsRootNodeHash);
+			var sealComponent = recordsData.Records[sealNode.CompletionRecordHash!.Value];
+            var complete = sealComponent.State.HasFlag(DestinyRecordState.CanEquipTitle);
+            var isLegacy = !sealNode.ParentNodeHashes.Contains(recordsData.RecordSealsRootNodeHash);
 
             var sealProperties = FilterProperty.None;
             sealProperties.Add(complete ? FilterProperty.Complete : FilterProperty.Incomplete);
             sealProperties.Add(isLegacy ? FilterProperty.Legacy : FilterProperty.Current);
 
-            if (_raidSealNames.Contains(sealNode.displayProperties.name))
+            if (_raidSealNames.Contains(sealNode.DisplayProperties.Name))
             {
                 sealProperties.Add(FilterProperty.Raid);
             }
             var isGilded = false;
             var gildedCount = 0;
-            if (sealDefinition.titleInfo.gildingTrackingRecordHash is { } gildingHash)
+            if (sealDefinition.TitleInfo.GildingTrackingRecordHash is { } gildingHash)
             {
-                if (recordsData.records.TryGetValue(gildingHash, out var gildingTracking))
+                if (recordsData.Records.TryGetValue(gildingHash, out var gildingTracking))
                 {
-                    isGilded = !gildingTracking.state.HasFlag(RecordState.ObjectiveNotCompleted);
-                    gildedCount = gildingTracking.completedCount ?? 0;
+                    isGilded = !gildingTracking.State.HasFlag(DestinyRecordState.ObjectiveNotCompleted);
+                    gildedCount = gildingTracking.CompletedCount ?? 0;
                     if (gildedCount > 0)
                     {
                         sealProperties.Add(FilterProperty.Gilded);
@@ -137,11 +145,11 @@ namespace TitleReport.Pages
             }
 
             var seal = new Seal(
-                sealDefinition.titleInfo.titlesByGender["Male"],
-                sealNode.displayProperties.name,
-                sealNode.displayProperties.description,
+                sealDefinition.TitleInfo.TitlesByGender[DestinyGender.Male],
+                sealNode.DisplayProperties.Name,
+                sealNode.DisplayProperties.Description,
                 sealProperties,
-                $"{Constants.BungieManifestEndpoint}{sealNode.originalIcon}",
+                $"{Constants.BungieManifestEndpoint}{sealNode.OriginalIcon}",
                 triumphs
             )
             {
@@ -151,38 +159,42 @@ namespace TitleReport.Pages
             return seal;
         }
 
-        private async Task<IEnumerable<Triumph>> GetSealTriumphs(PresentationNodeDefinition seal, Dictionary<uint, RecordComponent> userRecords)
+        private async Task<IEnumerable<Triumph>> GetSealTriumphs(DestinyPresentationNodeDefinition seal, IReadOnlyDictionary<uint, DestinyRecordComponent> userRecords)
 		{
 			var triumphs = new List<Triumph>();
 
-			foreach (var triumphNode in seal.children.records)
+			foreach (var triumphNode in seal.Children.Records)
 			{
-				var triumph = await DataBaseManager!.GetRecordByIndexAsync<RecordDefinition>(Constants.RecordStoreName, "hash", triumphNode.recordHash);
-				if (!userRecords.ContainsKey(triumphNode.recordHash))
+				var triumph = await DataBaseManager!.GetRecordByIndexAsync<DestinyRecordDefinition>(Constants.RecordStoreName, "hash", triumphNode.RecordHash);
+				if (!userRecords.ContainsKey(triumphNode.RecordHash))
 				{
-					Console.WriteLine($"Missing: {triumph.displayProperties.name}");
+					Console.WriteLine($"Missing: {triumph.DisplayProperties.Name}");
 				}
 				else
 				{
-					var triumphComponent = userRecords[triumphNode.recordHash];
-					bool isComplete = triumphComponent.objectives.All(o => o.complete);
-					float progress = 1.0f;
-					if (triumphComponent.objectives.Any())
+					var triumphComponent = userRecords[triumphNode.RecordHash];
+					if (triumphComponent.Objectives is null)
 					{
-						progress = (float)triumphComponent.objectives.Sum(o => (o.progress / (float)o.completionValue) ?? 1.0) / triumphComponent.objectives.Length;
+						Console.Out.Write(triumph.DisplayProperties.Name);
+					}
+					var isComplete = triumphComponent.Objectives.All(o => o.Complete);
+					var progress = 0.0f;
+					if (triumphComponent.Objectives.Any())
+					{
+						progress = (float)triumphComponent.Objectives.Average(o => (o.Progress / (float)o.CompletionValue) ?? 1.0);
 
 					}
-					triumphs.Add(new Triumph(triumph.displayProperties.name, isComplete, progress));
+					triumphs.Add(new Triumph(triumph.DisplayProperties.Name, isComplete, progress));
 				}
 
 			}
 			return triumphs.OrderBy(t => t.IsComplete);
 		}
 	
-		private async Task<PresentationNodeDefinition?> GetSealPresentationNodeByRecordHash(uint hash)
+		private async Task<DestinyPresentationNodeDefinition?> GetSealPresentationNodeByRecordHash(uint hash)
         {
-			var sealPresentationNodes = await DataBaseManager!.Where<PresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", PresentationNodeType.Records);
-			return sealPresentationNodes.FirstOrDefault(seal => seal.completionRecordHash == hash);
+			var sealPresentationNodes = await DataBaseManager!.Where<DestinyPresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", DestinyPresentationNodeType.Records);
+			return sealPresentationNodes.FirstOrDefault(seal => seal.CompletionRecordHash == hash);
 		}
 	}
 
