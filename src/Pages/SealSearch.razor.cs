@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Json;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using BungieSharper.Entities;
 using BungieSharper.Entities.Destiny;
 using BungieSharper.Entities.Destiny.Components.Records;
@@ -31,21 +32,27 @@ namespace TitleReport.Pages
 			var userResponse = await Http.PostAsJsonAsync($"{Constants.BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", userRequest);
 			if (userResponse.IsSuccessStatusCode)
 			{
-				var data = await userResponse.Content.ReadFromJsonAsync<ApiResponse<UserInfoCard[]>>();
-				if (data is null || data.Message != "Ok" || data.Response is null)
+				ApiResponse<UserInfoCard[]>? data;
+				try
 				{
-					await Console.Error.WriteLineAsync($"Failed to fetch user data from Bungie for {_bungieName}");
+					data = await userResponse.Content.ReadFromJsonAsync<ApiResponse<UserInfoCard[]>>();
+				}
+				catch (JsonException)
+				{
+					await Console.Error.WriteLineAsync($"Got invalid UserInfo response from Bungie API");
 					return null;
 				}
-
+				
+				if (data!.ErrorCode != PlatformErrorCodes.Success || data.Response is null)
+				{
+					await Console.Error.WriteLineAsync($"Failed to fetch user data from Bungie for {_bungieName}: {data.ErrorStatus} ({data.ErrorCode})");
+					return null;
+				}
+				
 				var user = data.Response.Length == 1 ? data.Response.First() : data.Response!.FirstOrDefault(user => user.MembershipType == user.CrossSaveOverride);
-
 				return user;
 			}
-			else
-			{
-				await Console.Error.WriteLineAsync(userResponse.ReasonPhrase);
-			}
+			await Console.Error.WriteLineAsync(userResponse.ReasonPhrase);
 			return null;
 		}
 
@@ -56,7 +63,7 @@ namespace TitleReport.Pages
 
 			if (response is null || response.ErrorCode != PlatformErrorCodes.Success || response.Response is null)
 			{
-				Console.Error.WriteLine("Failed to read profile");
+				await Console.Error.WriteLineAsync("Failed to read profile");
 				return null;
 			}
 			return response.Response;
