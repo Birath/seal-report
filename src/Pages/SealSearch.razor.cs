@@ -184,9 +184,9 @@ namespace TitleReport.Pages
 					{
 						Console.Out.Write(triumph.DisplayProperties.Name);
 					}
-					var isComplete = triumphComponent.Objectives.All(o => o.Complete);
+					var isComplete = triumphComponent.Objectives?.All(o => o.Complete) ?? false;
 					var progress = 0.0f;
-					if (triumphComponent.Objectives.Any())
+					if (triumphComponent.Objectives?.Any() ?? false)
 					{
 						progress = (float)triumphComponent.Objectives.Average(o => (o.Progress / (float)o.CompletionValue) ?? 1.0);
 
