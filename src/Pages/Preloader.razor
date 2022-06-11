@@ -42,9 +42,8 @@ else
 		{
 			Http.DefaultRequestHeaders.Add("X-API-Key", Constants.BungieApiKey);
 		}
-		
 
-		var _dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
+		var dataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
 		var response = await Http.GetFromJsonAsync<ApiResponse<DestinyManifest>>($"{Constants.BungieApiEndpoint}/Destiny2/Manifest/");
 		
 		if (response is null || response.ErrorCode != PlatformErrorCodes.Success)
@@ -62,7 +61,6 @@ else
 
 		if (storedManifestVersion != manifest.Version)
 		{
-			await LocalStorage.SetItemAsync("manifestVersion", manifest.Version);
 			var recordPath = manifest.JsonWorldComponentContentPaths["en"]["DestinyRecordDefinition"];
 			var presentationPath = manifest.JsonWorldComponentContentPaths["en"]["DestinyPresentationNodeDefinition"];
 
@@ -73,18 +71,18 @@ else
 			var records = await client.GetFromJsonAsync<Dictionary<uint, DestinyRecordDefinition>>($"{Constants.BungieManifestEndpoint}{recordPath}");
 			if (records != null && records.Any())
 			{
-				await _dataBaseManager.ClearTableAsync(Constants.RecordStoreName);
+				await dataBaseManager.ClearTableAsync(Constants.RecordStoreName);
 
-				bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.RecordStoreName, records.Values));
+				bulkAddTasks.Add( dataBaseManager.BulkAddRecordAsync(Constants.RecordStoreName, records.Values));
 			}
 
 			var presentationNodes = await client.GetFromJsonAsync<Dictionary<uint, DestinyPresentationNodeDefinition>>($"{Constants.BungieManifestEndpoint}{presentationPath}");
 
 			if (presentationNodes != null && presentationNodes.Any())
 			{
-				await _dataBaseManager.ClearTableAsync(Constants.PresentationNodesStoreName);
+				await dataBaseManager.ClearTableAsync(Constants.PresentationNodesStoreName);
 
-				bulkAddTasks.Add(_dataBaseManager.BulkAddRecordAsync(Constants.PresentationNodesStoreName, presentationNodes.Values));
+				bulkAddTasks.Add(dataBaseManager.BulkAddRecordAsync(Constants.PresentationNodesStoreName, presentationNodes.Values));
 			}
 
 			foreach (var transactionResult in await Task.WhenAll(bulkAddTasks))
@@ -94,6 +92,8 @@ else
 					Console.Error.WriteLine($"Bulk add {transactionResult.Transaction} failed : {transactionResult.Message}");
 				}
 			}
+			await LocalStorage.SetItemAsync("manifestVersion", manifest.Version);
+
 		}
 
 		_isLoaded = true;

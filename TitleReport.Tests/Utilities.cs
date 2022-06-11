@@ -25,7 +25,7 @@ namespace TitleReport.Tests
             ctx.JSInterop.SetupVoid("window.blazorDB.createDb", _ => true).SetVoidResult();
 
             ctx.Services.AddBlazoredLocalStorage();
-            ctx.Services.AddBlazorDB(options =>
+            ctx.AddBlazorDb(options =>
             {
                 options.Name = Constants.DefinitionDataBaseName;
                 options.StoreSchemas = new List<StoreSchema>()
