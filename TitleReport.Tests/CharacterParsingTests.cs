@@ -28,7 +28,14 @@ namespace TitleReport.Tests
             using var ctx = new TestContext();
 
             Utilities.SetupDefaultTestContext(ctx);
-
+            var dbFactory = ctx.Services.GetService<IBlazorDbFactory>();
+            var db = dbFactory.GetDbManager(Constants.DefinitionDataBaseName).Result;
+            db.AddRecord(new StoreRecord<DestinyRecordDefinition>()
+            {
+              Record = Utilities.DefaultSealDefinition,
+              DbName = db.DbName,
+              StoreName = Constants.RecordStoreName,
+            });
             var a = ctx.JSInterop.Setup<DestinyRecordDefinition>($"window.blazorDB.findItemByIndex", (invocation) =>
             {
                 dynamic data = invocation.Arguments[2]!;

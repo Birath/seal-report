@@ -114,7 +114,7 @@
 
 	private FilterProperty _activeFilter = FilterProperty.Complete;
 
-	public IndexedDbManager? DataBaseManager { get; private set; }
+	public IIndexedDbManager? DataBaseManager { get; private set; }
 
 	protected override async Task OnInitializedAsync()
 	{

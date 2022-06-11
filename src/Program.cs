@@ -1,6 +1,7 @@
 using BlazorDB;
 
 using Blazored.LocalStorage;
+using BlazorIndexedDb.Configuration;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.Fast.Components.FluentUI;
