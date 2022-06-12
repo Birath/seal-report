@@ -31,4 +31,15 @@
     <ProjectReference Include="..\src\TitleReport.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="TestData\PresentationNodeDefinitions.json" />
+    <Content Include="TestData\PresentationNodeDefinitions.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <None Remove="TestData\RecordDefinitions.json" />
+    <Content Include="TestData\RecordDefinitions.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

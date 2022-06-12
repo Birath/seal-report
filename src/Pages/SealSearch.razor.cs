@@ -58,15 +58,22 @@ namespace TitleReport.Pages
 
 		public async Task<DestinyProfileResponse?> GetDestinyProfile(UserInfoCard user)
         {
-			var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.MembershipType}/Profile/{user.MembershipId:D}/?components={DestinyComponentType.Records},{DestinyComponentType.PresentationNodes},{DestinyComponentType.Characters}");
-			var response = await Http.GetFromJsonAsync<ApiResponse<DestinyProfileResponse>>(uri);
-
-			if (response is null || response.ErrorCode != PlatformErrorCodes.Success || response.Response is null)
+			var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.MembershipType}/Profile/{user.MembershipId:D}/?components={DestinyComponentType.Records:D},{DestinyComponentType.PresentationNodes:D},{DestinyComponentType.Characters:D}");
+			try
 			{
+				var response = await Http.GetFromJsonAsync<ApiResponse<DestinyProfileResponse>>(uri);
+				if (response is not null && response.ErrorCode == PlatformErrorCodes.Success &&
+				    response.Response is not null) return response.Response;
 				await Console.Error.WriteLineAsync("Failed to read profile");
 				return null;
 			}
-			return response.Response;
+			catch (HttpRequestException ex)
+			{
+				await Console.Out.WriteLineAsync("Failed to get Destiny profile");
+				await Console.Out.WriteLineAsync(ex.Message);
+				return null;
+			}
+
 		}
 
 		public async Task<ProfileOverviewData> GetUserProfileOverview(string userName, IEnumerable<DestinyCharacterComponent> characters, DestinyProfileRecordsComponent recordsData)
@@ -91,7 +98,6 @@ namespace TitleReport.Pages
 			var profileSeals = new List<Seal>();
 
 			var sealPresentationNodes = await DataBaseManager.Where<DestinyPresentationNodeDefinition>(Constants.PresentationNodesStoreName, "nodeType", DestinyPresentationNodeType.Records);
-			var sealRootNode = await DataBaseManager.GetRecordByIndexAsync<DestinyPresentationNodeDefinition>(Constants.PresentationNodesStoreName, "hash", recordsData.RecordSealsRootNodeHash);
 			foreach (var sealNode in sealPresentationNodes)
             {
                 if (sealNode?.CompletionRecordHash is null) continue;
@@ -106,8 +112,7 @@ namespace TitleReport.Pages
 
                 var triumphs = await GetSealTriumphs(sealNode, records);
                 var seal = CreateSeal(recordsData, sealNode, sealDefinition, triumphs);
-
-                profileSeals.Add(seal);
+                if (seal != null) profileSeals.Add(seal);
             }
 
             var sortedTitles = profileSeals.OrderByDescending(seal => seal.IsGildedCurrentSeason)
@@ -118,9 +123,11 @@ namespace TitleReport.Pages
 			return sortedTitles;
 		}
 
-        private Seal CreateSeal(DestinyProfileRecordsComponent recordsData, DestinyPresentationNodeDefinition sealNode, DestinyRecordDefinition sealDefinition, IEnumerable<Triumph> triumphs)
+        private Seal? CreateSeal(DestinyProfileRecordsComponent recordsData, DestinyPresentationNodeDefinition sealNode, DestinyRecordDefinition sealDefinition, IEnumerable<Triumph> triumphs)
         {
-			var sealComponent = recordsData.Records[sealNode.CompletionRecordHash!.Value];
+	        if (!recordsData.Records.TryGetValue(sealNode.CompletionRecordHash!.Value, out var sealComponent))
+		        return null;
+			
             var complete = sealComponent.State.HasFlag(DestinyRecordState.CanEquipTitle);
             var isLegacy = !sealNode.ParentNodeHashes.Contains(recordsData.RecordSealsRootNodeHash);
 
@@ -173,6 +180,7 @@ namespace TitleReport.Pages
 			foreach (var triumphNode in seal.Children.Records)
 			{
 				var triumph = await DataBaseManager!.GetRecordByIndexAsync<DestinyRecordDefinition>(Constants.RecordStoreName, "hash", triumphNode.RecordHash);
+				
 				if (!userRecords.ContainsKey(triumphNode.RecordHash))
 				{
 					Console.WriteLine($"Missing: {triumph.DisplayProperties.Name}");
