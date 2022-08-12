@@ -9,6 +9,7 @@ using BungieSharper.Entities.Destiny.Definitions.Records;
 using BungieSharper.Entities.Destiny.Entities.Characters;
 using BungieSharper.Entities.Destiny.Responses;
 using BungieSharper.Entities.Exceptions;
+using BungieSharper.Entities.User;
 using TitleReport.Components.ProfileOverview;
 using UserInfoCard = BungieSharper.Entities.User.UserInfoCard;
 
@@ -27,7 +28,7 @@ namespace TitleReport.Pages
 				"A Shadow Rises"
 			};
 
-		public async Task<UserInfoCard?> SearchGuardianAsync(BungieName userRequest)
+		public async Task<UserInfoCard?> GetUserInfoAsync(BungieName userRequest)
 		{
 			var userResponse = await Http.PostAsJsonAsync($"{Constants.BungieApiEndpoint}/Destiny2/SearchDestinyPlayerByBungieName/-1/", userRequest);
 			if (userResponse.IsSuccessStatusCode)
@@ -56,6 +57,20 @@ namespace TitleReport.Pages
 			return null;
 		}
 
+		public async Task<IEnumerable<UserSearchResponseDetail>> SearchName(string name)
+		{
+			var uri = new Uri(
+				$"{Constants.BungieApiEndpoint}/User/Search/GlobalName/0/");
+			var searchRequest = new UserSearchPrefixRequest()
+			{
+				DisplayNamePrefix = name,
+			};
+			var response = await Http.PostAsJsonAsync(uri, searchRequest);
+
+			var data = await response.Content.ReadFromJsonAsync<ApiResponse<UserSearchResponse>>();
+			return data is null ? Enumerable.Empty<UserSearchResponseDetail>(): data.Response.SearchResults;
+		}
+		
 		public async Task<DestinyProfileResponse?> GetDestinyProfile(UserInfoCard user)
         {
 			var uri = new Uri($"{Constants.BungieApiEndpoint}/Destiny2/{user.MembershipType}/Profile/{user.MembershipId:D}/?components={DestinyComponentType.Records:D},{DestinyComponentType.PresentationNodes:D},{DestinyComponentType.Characters:D}");
@@ -79,14 +94,18 @@ namespace TitleReport.Pages
 		public async Task<ProfileOverviewData> GetUserProfileOverview(string userName, IEnumerable<DestinyCharacterComponent> characters, DestinyProfileRecordsComponent recordsData)
         {
 			var latestPlayed = characters.MaxBy(character => character.DateLastPlayed);
-
+			if (latestPlayed!.TitleRecordHash is null)
+			{
+				return new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.EmblemBackgroundPath}", null);
+			}
+			
 			var equippedSealDefinition = await DataBaseManager!.GetRecordByIndexAsync<DestinyRecordDefinition>(Constants.RecordStoreName, "hash", latestPlayed!.TitleRecordHash);
 			
-			var equippedSealNode = await GetSealPresentationNodeByRecordHash(equippedSealDefinition.Hash);
-
-			return equippedSealNode is null
-                ? new ProfileOverviewData(userName, latestPlayed!.EmblemBackgroundPath, new Seal("ERROR", "ERROR", "ERROR", FilterProperty.None, "", Array.Empty<Triumph>()))
-                : new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.EmblemBackgroundPath}", CreateSeal(recordsData, equippedSealNode, equippedSealDefinition, Array.Empty<Triumph>()));
+			var equippedSealNode = equippedSealDefinition is null ? null : await GetSealPresentationNodeByRecordHash(equippedSealDefinition.Hash);
+			var seal = equippedSealNode is null
+				? null
+				: CreateSeal(recordsData, equippedSealNode, equippedSealDefinition!, Array.Empty<Triumph>());
+			return new ProfileOverviewData(userName, $"{Constants.BungieManifestEndpoint}{latestPlayed!.EmblemBackgroundPath}", seal);
         }
 
         public async Task<IEnumerable<Seal>> GetUserSeals(DestinyProfileRecordsComponent recordsData)
@@ -188,18 +207,13 @@ namespace TitleReport.Pages
 				else
 				{
 					var triumphComponent = userRecords[triumphNode.RecordHash];
-					if (triumphComponent.Objectives is null)
-					{
-						Console.Out.Write(triumph.DisplayProperties.Name);
-					}
-					var isComplete = triumphComponent.Objectives?.All(o => o.Complete) ?? false;
-					var progress = 0.0f;
+					var isComplete = triumphComponent.Objectives is null ? triumphComponent.State.HasFlag(DestinyRecordState.RecordRedeemed) : triumphComponent.Objectives.All(o => o.Complete);
+					var progress = isComplete ? 1.0f: 0.0f;
 					if (triumphComponent.Objectives?.Any() ?? false)
 					{
 						progress = (float)triumphComponent.Objectives.Average(o => (o.Progress / (float)o.CompletionValue) ?? 1.0);
-
 					}
-					triumphs.Add(new Triumph(triumph.DisplayProperties.Name, isComplete, progress));
+					triumphs.Add(new Triumph(triumph.DisplayProperties.Name, triumph.Hash, isComplete, progress));
 				}
 
 			}
@@ -247,14 +261,17 @@ namespace TitleReport.Pages
 	public class Triumph
 	{
 		public string Name { get; }
+		
+		public uint Hash { get; }
 
 		public bool IsComplete { get; }
 
 		public float CompletionPercentage { get; }
 
-		public Triumph(string name, bool isComplete, float completion)
+		public Triumph(string name, uint hash, bool isComplete, float completion)
 		{
 			Name = name;
+			Hash = hash;
 			IsComplete = isComplete;
 			CompletionPercentage = completion;
 		}
@@ -285,5 +302,15 @@ namespace TitleReport.Pages
 			properties &= ~property;
         }
 	}
+	
+	public class SearchResult<T>
+	{
+		public T Result { get; }
+		
+		public bool IsSelected { get; set; }
+
+		public SearchResult(T result) => Result = result;
+	}
+
 
 }

@@ -36,7 +36,7 @@ public class SealSearchTests
             });
         SealSearch.BungieName.TryParse(name, out var searchData);
         var searchComponent = ctx.RenderComponent<SealSearch>();
-        var actual = searchComponent.Instance.SearchGuardianAsync(searchData!).Result;
+        var actual = searchComponent.Instance.GetUserInfoAsync(searchData!).Result;
         expected.ToExpectedObject().ShouldEqual(actual);
     }
 
@@ -67,7 +67,7 @@ public class SealSearchTests
             });
         SealSearch.BungieName.TryParse(Utilities.DefaultUserName, out var searchData);
         var searchComponent = ctx.RenderComponent<SealSearch>();
-        var actual = searchComponent.Instance.SearchGuardianAsync(searchData!).Result;
+        var actual = searchComponent.Instance.GetUserInfoAsync(searchData!).Result;
         expected.ToExpectedObject().ShouldEqual(actual);
     }
 
@@ -82,7 +82,7 @@ public class SealSearchTests
 
         SealSearch.BungieName.TryParse(Utilities.DefaultUserName, out var searchData);
         var searchComponent = ctx.RenderComponent<SealSearch>();
-        var actual = searchComponent.Instance.SearchGuardianAsync(searchData!).Result;
+        var actual = searchComponent.Instance.GetUserInfoAsync(searchData!).Result;
         Assert.Null(actual);
     }
 
@@ -103,7 +103,7 @@ public class SealSearchTests
 
         SealSearch.BungieName.TryParse(Utilities.DefaultUserName, out var searchData);
         var searchComponent = ctx.RenderComponent<SealSearch>();
-        var actual = searchComponent.Instance.SearchGuardianAsync(searchData!).Result;
+        var actual = searchComponent.Instance.GetUserInfoAsync(searchData!).Result;
         Assert.Null(actual);
     }
 
@@ -120,7 +120,7 @@ public class SealSearchTests
 
         SealSearch.BungieName.TryParse(Utilities.DefaultUserName, out var searchData);
         var searchComponent = ctx.RenderComponent<SealSearch>();
-        var actual = searchComponent.Instance.SearchGuardianAsync(searchData!).Result;
+        var actual = searchComponent.Instance.GetUserInfoAsync(searchData!).Result;
         Assert.Null(actual);
     }
 
@@ -150,10 +150,7 @@ public class SealSearchTests
         new object[]
         {
             Utilities.DefaultRecordComponents,
-            new[] { Utilities.DefaultSeal }
-        },
-        new object[]
-        {
+            new List<Seal>{ Utilities.DefaultSeal }
         }
     };
 

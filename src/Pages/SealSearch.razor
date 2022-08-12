@@ -3,6 +3,8 @@
 @using Microsoft.AspNetCore.Components.WebAssembly.Http
 @using System.Text.Json
 @using System.Threading.Tasks
+@using BungieSharper.Entities.User
+@using Microsoft.AspNetCore.Components
 @using Microsoft.Fast.Components.FluentUI
 @using TitleReport.Components.ProfileOverview
 @inject HttpClient Http
@@ -17,10 +19,23 @@
 
 <div class="container-fluid">
 	<div class="row gx-1 justify-content-center">
-		<form class="col-12 col-sm-6 d-flex align-self-center">
-			<FluentTextField class="flex-fill" @bind-Value="_bungieName" Placeholder="Bungie Name" Autofocus="true" @onkeydown="Enter"/>
+		<form class="col-12 col-sm-6 d-flex align-self-center" @onkeydown:preventDefault="_shouldPreventSearchDefault">
+			<FluentTextField class="flex-fill" @bind-Value="_bungieName" Placeholder="Bungie Name" Autofocus="true" @onkeydown="OnSearchKeyDown"  @oninput="OnSearchNameChange" />
 			<FluentButton class="ms-1" Appearance="@Appearance.Accent" @onclick="Search">Search</FluentButton>
 		</form>
+	</div>
+	<div class="row gx-1 justify-content-center">
+		<div class="col-12 col-sm-6 d-flex align-self-center position-relative">
+			@if (_showSearchResults)
+        	{
+		        <FluentListbox @bind-Value="_selectedSearchUserProfile" class="w-100 position-absolute" style="z-index: 1070">
+			        @foreach (var searchResult in _searchResults.Take(SearchResultsMaximumDisplayCount))
+			        {
+				        <FluentOption @onclick="Search" Value="@searchResult" Selected="@searchResult.IsSelected">@searchResult.Result.UserName#@searchResult.Result.DisplayNameCode</FluentOption>
+			        }
+		        </FluentListbox>
+        	}
+        </div>
 	</div>
 </div>
 @if (_isLoadingTitles)
@@ -35,7 +50,7 @@
 	<div class="container-xl mt-2">
 		<div class="row justify-content-center">
 			<div class="col-12 d-flex justify-content-center">
-				<ProfileOverview EmblemUrl="@(ActiveProfile.EmblemUrl)" UserName="@(ActiveProfile.UserName)" Seals="@(ActiveProfile.Seals)" EquippedSeal="@(ActiveProfile.EquipedSeal)" />
+				<ProfileOverview EmblemUrl="@(ActiveProfile.EmblemUrl)" UserName="@(ActiveProfile.UserName)" Seals="@(ActiveProfile.Seals)" EquippedSeal="@(ActiveProfile.EquippedSeal)" />
 			</div>
 		</div>
 		<div class="row justify-content-center mb-2">
@@ -89,7 +104,7 @@
 										<div slot="start">Triumphs @seal.RequiredTriumphs.Count(t => t.IsComplete) / @seal.RequiredTriumphs.Count()</div>
 										@foreach (var triumph in seal.RequiredTriumphs)
 										{
-											<p style="@(triumph.IsComplete ? "color: green" : "color: red")">@triumph.Name - @triumph.CompletionPercentage</p>
+											<a style="@(triumph.IsComplete ? "color: green" : "color: red")" href="https://www.light.gg/db/legend/triumphs/@triumph.Hash/" target="_blank">@triumph.Name - @triumph.CompletionPercentage</a><br/>
 										}
 									</FluentAccordionItem>
 								</FluentAccordion>
@@ -109,8 +124,17 @@
 	private bool _isLoadingTitles = false;
 	private bool _hasLoadedProfile = false;
 	private string? _currentlySearchingForName = "";
-	
-	public ProfileOverviewData? ActiveProfile { get; private set; } = new ProfileOverviewData("TEST", "https://www.bungie.net/common/destiny2_content/icons/c612ec23a7f3b57042cb988788ef37a8.jpg", new Seal("TEST", "TEST", "TEST DESCRIPTION", FilterProperty.Complete, "ICON", Array.Empty<Triumph>()));
+	private bool _shouldPreventSearchDefault = false;
+
+	private const int SearchResultsMaximumDisplayCount = 5;
+
+	private bool _showSearchResults = false;
+
+	private ProfileOverviewData? _selectedSearchUserProfile;
+
+	private readonly List<SearchResult<ProfileOverviewData>> _searchResults = new List<SearchResult<ProfileOverviewData>>();
+
+	public ProfileOverviewData? ActiveProfile { get; private set; } = new ProfileOverviewData("TEST", "https://www.bungie.net/common/destiny2_content/icons/c612ec23a7f3b57042cb988788ef37a8.jpg", null);
 
 	private FilterProperty _activeFilter = FilterProperty.Complete;
 
@@ -123,6 +147,11 @@
 
 	private async Task Search()
 	{
+		_showSearchResults = false;
+		var selectedUser = _searchResults.FirstOrDefault(result => result.IsSelected);
+		if (selectedUser is null && string.IsNullOrEmpty(_bungieName)) return;
+		
+		_bungieName = selectedUser is null ? _bungieName : $"{selectedUser.Result.UserName}#{selectedUser.Result.DisplayNameCode}";
 		if (_isLoadingTitles && _currentlySearchingForName == _bungieName) return;
 		if (string.IsNullOrEmpty(_bungieName) || !_bungieName.Contains('#'))
 		{
@@ -140,7 +169,7 @@
 		_currentlySearchingForName = _bungieName;
 		try
 		{
-			var userInfo = await SearchGuardianAsync(searchData!);
+			var userInfo = await GetUserInfoAsync(searchData!);
 			if (userInfo is null)
 			{
 				await Console.Out.WriteLineAsync($"Could not find user data for {_bungieName}");
@@ -180,6 +209,7 @@
 		}
 		finally
 		{
+			_currentlySearchingForName = "";
 			_isLoadingTitles = false;
 		}
 	}
@@ -219,8 +249,58 @@
 		}
 	}
 
-	private Task Enter(KeyboardEventArgs obj)
+	private void MoveSelected(int direction)
 	{
-		return obj.Code is "Enter" or "NumpadEnter" ? Search() : Task.CompletedTask;
+		if (!_searchResults.Any()) return;
+		var currentSelectedIndex = _searchResults.FindIndex(result => result.IsSelected);
+		if (currentSelectedIndex == -1)
+		{
+			currentSelectedIndex = 0;
+			_searchResults.First().IsSelected = true;
+		}
+		_searchResults[currentSelectedIndex].IsSelected = false;
+		_searchResults[Math.Clamp(currentSelectedIndex + direction, 0, SearchResultsMaximumDisplayCount - 1)].IsSelected = true;
 	}
+
+	private async Task OnSearchKeyDown(KeyboardEventArgs obj)
+	{
+		_shouldPreventSearchDefault = false;
+		switch (obj.Code)
+		{
+			case "Enter" or "NumpadEnter":
+				await Search();
+				break;
+			case "ArrowDown":
+				MoveSelected(1);
+				_shouldPreventSearchDefault = true;
+				break;
+			case "ArrowUp":
+				MoveSelected(-1);
+				_shouldPreventSearchDefault = true;
+				break;
+			case "Escape":
+				_showSearchResults = false;
+				break;
+		}
+
+	}
+
+	private async Task OnSearchNameChange(ChangeEventArgs args)
+	{
+		var searchResults = await SearchName(args.Value as string ?? "");
+		_searchResults.Clear();
+		var userSearchResponseDetails = searchResults as UserSearchResponseDetail[] ?? searchResults.ToArray();
+		foreach (var result in userSearchResponseDetails) 
+		{
+			_searchResults.Add(new SearchResult<ProfileOverviewData>(new ProfileOverviewData(result.BungieGlobalDisplayName, "", null)
+			{
+				DisplayNameCode = result.BungieGlobalDisplayNameCode
+			})
+			{
+				IsSelected = result == userSearchResponseDetails.First()
+			});
+		}
+		_showSearchResults = _searchResults.Any();
+	}
+
 }
