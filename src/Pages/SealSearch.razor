@@ -28,10 +28,10 @@
 		<div class="col-12 col-sm-6 d-flex align-self-center position-relative">
 			@if (_showSearchResults)
         	{
-		        <FluentListbox @bind-Value="_selectedSearchUserProfile" class="w-100 position-absolute" style="z-index: 1070">
+				<FluentListbox TOption="ProfileOverviewData" @bind-Value="_selectedSearchUsers" class="w-100 position-absolute" style="z-index: 1070">
 			        @foreach (var searchResult in _searchResults.Take(SearchResultsMaximumDisplayCount))
 			        {
-				        <FluentOption @onclick="Search" Value="@searchResult" Selected="@searchResult.IsSelected">@searchResult.Result.UserName#@searchResult.Result.DisplayNameCode</FluentOption>
+				        <FluentOption TOption="ProfileOverviewData" @onclick="Search" Value="@searchResult.Result.UserName" Selected="@searchResult.IsSelected">@searchResult.Result.UserName#@searchResult.Result.DisplayNameCode</FluentOption>
 			        }
 		        </FluentListbox>
         	}
@@ -100,7 +100,7 @@
 						<div class="row pt-2">
 							<div class="col-12">
 								<FluentAccordion>
-									<FluentAccordionItem>
+									<FluentAccordionItem Heading="">
 										<div slot="start">Triumphs @seal.RequiredTriumphs.Count(t => t.IsComplete) / @seal.RequiredTriumphs.Count()</div>
 										@foreach (var triumph in seal.RequiredTriumphs)
 										{
@@ -131,8 +131,11 @@
 	private bool _showSearchResults = false;
 
 	private ProfileOverviewData? _selectedSearchUserProfile;
+	private string? _selectedSearchUsers;
 
 	private readonly List<SearchResult<ProfileOverviewData>> _searchResults = new List<SearchResult<ProfileOverviewData>>();
+
+	private readonly List<SearchResult<ProfileOverviewData>> _searchHistory = new List<SearchResult<ProfileOverviewData>>();
 
 	public ProfileOverviewData? ActiveProfile { get; private set; } = new ProfileOverviewData("TEST", "https://www.bungie.net/common/destiny2_content/icons/c612ec23a7f3b57042cb988788ef37a8.jpg", null);
 
@@ -143,6 +146,9 @@
 	protected override async Task OnInitializedAsync()
 	{
 		DataBaseManager = await DbFactory.GetDbManager(Constants.DefinitionDataBaseName);
+
+		var searchHistory = await LocalStorage.GetItemAsync<List<SearchResult<ProfileOverviewData>>>("searchHistory");
+		_searchHistory.AddRange(searchHistory?.Take(5) ?? Array.Empty<SearchResult<ProfileOverviewData>>());
 	}
 
 	private async Task Search()
@@ -167,6 +173,7 @@
 
 		_isLoadingTitles = true;
 		_currentlySearchingForName = _bungieName;
+		
 		try
 		{
 			var userInfo = await GetUserInfoAsync(searchData!);
@@ -186,18 +193,18 @@
 
 			if (profile.ProfileRecords?.Data is null)
 			{
-				Console.Error.WriteLine($"Failed to get profile records for {_bungieName}");
+				await Console.Out.WriteLineAsync($"Failed to get profile records for {_bungieName}");
 				return;
 			}
 
 			if (profile.Characters?.Data is null)
 			{
-				await Console.Error.WriteLineAsync($"Failed to get characters for {_bungieName}");
+				await Console.Out.WriteLineAsync($"Failed to get characters for {_bungieName}");
 				return;
 			}
 
 			ActiveProfile = await GetUserProfileOverview(userInfo.DisplayName, profile.Characters.Data.Values, profile.ProfileRecords.Data);
-
+			
 			var userSeals = await GetUserSeals(profile.ProfileRecords.Data);
 			_seals.Clear();
 			_seals.AddRange(userSeals);
@@ -206,6 +213,8 @@
 				.Where(seal => seal.ActiveProperties.HasFlag(FilterProperty.Current))
 			);
 			_hasLoadedProfile = true;
+			_searchHistory.Insert(0, new SearchResult<ProfileOverviewData>(new ProfileOverviewData($"{ActiveProfile.UserName}#{ActiveProfile.DisplayNameCode}", ActiveProfile.EmblemUrl, null)));
+			await LocalStorage.SetItemAsync("searchHistory", _searchHistory.ToList());
 		}
 		finally
 		{
@@ -287,18 +296,25 @@
 
 	private async Task OnSearchNameChange(ChangeEventArgs args)
 	{
-		var searchResults = await SearchName(args.Value as string ?? "");
 		_searchResults.Clear();
-		var userSearchResponseDetails = searchResults as UserSearchResponseDetail[] ?? searchResults.ToArray();
-		foreach (var result in userSearchResponseDetails) 
+		if (string.IsNullOrEmpty(args.Value as string))
 		{
-			_searchResults.Add(new SearchResult<ProfileOverviewData>(new ProfileOverviewData(result.BungieGlobalDisplayName, "", null)
+			_searchResults.AddRange(_searchHistory);
+		}
+		else
+		{
+			var searchResults = await SearchName(args.Value as string ?? "");
+			var userSearchResponseDetails = searchResults as UserSearchResponseDetail[] ?? searchResults.ToArray();
+			foreach (var result in userSearchResponseDetails) 
 			{
-				DisplayNameCode = result.BungieGlobalDisplayNameCode
-			})
-			{
-				IsSelected = result == userSearchResponseDetails.First()
-			});
+				_searchResults.Add(new SearchResult<ProfileOverviewData>(new ProfileOverviewData(result.BungieGlobalDisplayName, "", null)
+				{
+					DisplayNameCode = result.BungieGlobalDisplayNameCode
+				})
+				{
+					IsSelected = result == userSearchResponseDetails.First()
+				});
+			}
 		}
 		_showSearchResults = _searchResults.Any();
 	}

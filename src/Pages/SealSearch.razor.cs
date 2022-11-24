@@ -1,6 +1,7 @@
 ﻿using System.Net.Http.Json;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using BungieSharper.Entities;
 using BungieSharper.Entities.Destiny;
 using BungieSharper.Entities.Destiny.Components.Records;
@@ -238,9 +239,9 @@ namespace TitleReport.Pages
 
 		public bool IsLegacy => ActiveProperties.HasFlag(FilterProperty.Legacy);
 
-		public bool IsGildedCurrentSeason { get; set; }
+		public bool IsGildedCurrentSeason { get; init; }
 
-		public int GildedCount { get; set; }
+		public int GildedCount { get; init; }
 
 		public IEnumerable<Triumph> RequiredTriumphs { get; }
 
