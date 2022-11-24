@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seal Report</title>
+    <base href="/" />
+    <link href="css/bootstrap/bootstrap.min.css" rel="stylesheet" />
+    <link href="css/app.css" rel="stylesheet" />
+    <link href="TitleReport.styles.css" rel="stylesheet" />
+</head>
+
+<body>
+    <div id="app" class="vh-100">Loading...</div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">🗙</a>
+    </div>
+    <script>
+        document.fonts.ready.then(() => {
+            if (!document.fonts.check("1em Destiny Symbols")) {
+                const destinySymbolsFont = new FontFace('Destiny Symbols', `url(${document.baseURI}/fonts/Destiny_Keys.woff2)`);
+                destinySymbolsFont.load().then(font => {
+                    document.fonts.add(font);
+                })
+            }
+        })
+    </script>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script src="_content/BlazorIndexedDB/dexie.min.js"></script>
+    <script src="_content/BlazorIndexedDB/blazorDB.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@fluentui/web-components/dist/web-components.min.js"></script>
+</body>
+
+</html>
